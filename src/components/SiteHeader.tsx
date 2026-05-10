@@ -17,6 +17,7 @@ export function SiteHeader() {
         <nav className="flex items-center gap-1 text-sm">
           <NavLink to="/garage">Garage</NavLink>
           <NavLink to="/tournaments">Tournaments</NavLink>
+          <NavLink to="/backup">Backup</NavLink>
         </nav>
       </div>
     </header>
