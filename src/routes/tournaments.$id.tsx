@@ -50,11 +50,21 @@ function TournamentDetail() {
 
   function reset() {
     setTournaments((prev) =>
-      prev.map((x) =>
-        x.id === t!.id
-          ? { ...x, champion: null, matches: x.matches.map((m, i) => ({ ...m, winnerId: null, carAId: i < (x.format === "round-robin" ? x.matches.length : x.carIds.length / 2) ? m.carAId : null, carBId: i < (x.format === "round-robin" ? x.matches.length : x.carIds.length / 2) ? m.carBId : null })) }
-          : x,
-      ),
+      prev.map((x) => {
+        if (x.id !== t!.id) return x;
+        const matches = x.matches.map((m) => {
+          if (x.format === "round-robin") return { ...m, winnerId: null };
+          // elimination: keep only round-1 winners-bracket pairings
+          const isRound1Winners = m.round === 1 && (m.bracket === undefined || m.bracket === "winners");
+          return {
+            ...m,
+            winnerId: null,
+            carAId: isRound1Winners ? m.carAId : null,
+            carBId: isRound1Winners ? m.carBId : null,
+          };
+        });
+        return { ...x, champion: null, matches };
+      }),
     );
   }
 
