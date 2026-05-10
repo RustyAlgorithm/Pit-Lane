@@ -87,8 +87,6 @@ export async function importBackupZip(file: File): Promise<{ cars: Car[]; tourna
         const blob = await f.async("blob");
         const typed = new Blob([blob], { type: mime });
         photo = await blobToDataUrl(typed);
-        continue_marker: ;
-        photo = await blobToDataUrl(blob);
       } else {
         photo = undefined;
       }
