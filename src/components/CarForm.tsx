@@ -6,8 +6,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { generateDriverName } from "@/lib/driver-names";
 import type { Car } from "@/lib/types";
 import { uid } from "@/lib/storage";
-import { Sparkles, Upload, X } from "lucide-react";
+import { Sparkles, Upload, X, Crop } from "lucide-react";
 import { toast } from "sonner";
+import { ImageCropDialog } from "@/components/ImageCropDialog";
+import { fileToDataUrl } from "@/lib/image";
 
 interface Props {
   initial?: Car;
@@ -27,15 +29,21 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
   const [photo, setPhoto] = useState<string | undefined>(initial?.photo);
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
 
-  function handleFile(file: File) {
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Image must be under 2MB");
+  async function handleFile(file: File) {
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Image must be under 20MB");
       return;
     }
-    const r = new FileReader();
-    r.onload = () => setPhoto(r.result as string);
-    r.readAsDataURL(file);
+    try {
+      const url = await fileToDataUrl(file);
+      setCropSrc(url);
+      setCropOpen(true);
+    } catch {
+      toast.error("Could not read image");
+    }
   }
 
   function submit(e: React.FormEvent) {
@@ -64,13 +72,24 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
             {photo ? (
               <>
                 <img src={photo} alt="" className="h-full w-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => setPhoto(undefined)}
-                  className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-background/90 shadow"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                <div className="absolute right-1 top-1 flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => { setCropSrc(photo); setCropOpen(true); }}
+                    className="grid h-6 w-6 place-items-center rounded-full bg-background/90 shadow"
+                    title="Re-crop"
+                  >
+                    <Crop className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPhoto(undefined)}
+                    className="grid h-6 w-6 place-items-center rounded-full bg-background/90 shadow"
+                    title="Remove"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </>
             ) : (
               <button
@@ -90,6 +109,17 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
             className="hidden"
             onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
           />
+          {photo ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-2 w-full text-xs"
+              onClick={() => fileRef.current?.click()}
+            >
+              Replace
+            </Button>
+          ) : null}
         </div>
 
         <div className="grid gap-3">
@@ -152,6 +182,13 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
         <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button type="submit">{initial ? "Save" : "Add car"}</Button>
       </div>
+      <ImageCropDialog
+        src={cropSrc}
+        open={cropOpen}
+        onOpenChange={(o) => { setCropOpen(o); if (!o) { setCropSrc(null); if (fileRef.current) fileRef.current.value = ""; } }}
+        onCropped={(url) => setPhoto(url)}
+        aspect={1}
+      />
     </form>
   );
 }
