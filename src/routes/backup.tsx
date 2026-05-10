@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useLocalStorage } from "@/lib/storage";
 import type { Car, Tournament } from "@/lib/types";
-import { exportBackupZip, importBackupZip, downloadBlob } from "@/lib/backup";
-import { Download, Upload, Database } from "lucide-react";
+import { exportBackupZip, importBackupZip, downloadBlob, BackupValidationError } from "@/lib/backup";
+import { Download, Upload, Database, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/backup")({
@@ -34,8 +34,9 @@ function BackupPage() {
   const [cars, setCars] = useLocalStorage<Car[]>("pitlane.cars", []);
   const [tournaments, setTournaments] = useLocalStorage<Tournament[]>("pitlane.tournaments", []);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [pending, setPending] = useState<{ cars: Car[]; tournaments: Tournament[] } | null>(null);
+  const [pending, setPending] = useState<{ cars: Car[]; tournaments: Tournament[]; warnings: string[] } | null>(null);
   const [mode, setMode] = useState<Mode>("replace");
+  const [errorReport, setErrorReport] = useState<{ issues: string[]; warnings: string[] } | null>(null);
 
   async function doExport() {
     try {
@@ -52,8 +53,14 @@ function BackupPage() {
     try {
       const data = await importBackupZip(file);
       setPending(data);
+      setErrorReport(null);
     } catch (e) {
-      toast.error((e as Error).message || "Invalid backup file");
+      if (e instanceof BackupValidationError) {
+        setErrorReport({ issues: e.issues, warnings: e.warnings });
+        toast.error(`Backup is invalid — ${e.issues.length} issue(s) found`);
+      } else {
+        toast.error((e as Error).message || "Invalid backup file");
+      }
     } finally {
       if (fileRef.current) fileRef.current.value = "";
     }
@@ -126,6 +133,29 @@ function BackupPage() {
         </Button>
       </Card>
 
+      {errorReport && (
+        <Card className="mt-4 border-destructive/40 p-5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              Import blocked — {errorReport.issues.length} issue{errorReport.issues.length === 1 ? "" : "s"}
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setErrorReport(null)}>Dismiss</Button>
+          </div>
+          <ul className="mt-3 max-h-60 list-disc space-y-1 overflow-y-auto pl-5 text-xs text-foreground">
+            {errorReport.issues.map((m, i) => <li key={`e${i}`}>{m}</li>)}
+          </ul>
+          {errorReport.warnings.length > 0 && (
+            <>
+              <div className="mt-3 text-xs font-semibold text-muted-foreground">Warnings</div>
+              <ul className="mt-1 max-h-32 list-disc space-y-1 overflow-y-auto pl-5 text-xs text-muted-foreground">
+                {errorReport.warnings.map((m, i) => <li key={`w${i}`}>{m}</li>)}
+              </ul>
+            </>
+          )}
+        </Card>
+      )}
+
       <AlertDialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -136,6 +166,16 @@ function BackupPage() {
                   Backup contains <strong>{pending?.cars.length ?? 0}</strong> cars and{" "}
                   <strong>{pending?.tournaments.length ?? 0}</strong> tournaments.
                 </div>
+                {pending && pending.warnings.length > 0 && (
+                  <div className="rounded-lg border border-border bg-secondary/40 p-3">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                      <AlertTriangle className="h-3.5 w-3.5" /> {pending.warnings.length} warning{pending.warnings.length === 1 ? "" : "s"}
+                    </div>
+                    <ul className="mt-1 max-h-32 list-disc space-y-0.5 overflow-y-auto pl-5 text-xs text-muted-foreground">
+                      {pending.warnings.map((m, i) => <li key={i}>{m}</li>)}
+                    </ul>
+                  </div>
+                )}
                 <div className="grid gap-2 rounded-lg border border-border p-3 text-sm">
                   <label className="flex items-start gap-2 cursor-pointer">
                     <input type="radio" name="mode" checked={mode === "replace"} onChange={() => setMode("replace")} className="mt-1" />

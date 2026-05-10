@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { z } from "zod";
 import type { Car, Tournament } from "./types";
 import { uid } from "./storage";
 
@@ -38,6 +39,58 @@ export interface BackupManifest {
   tournaments: Tournament[];
 }
 
+export class BackupValidationError extends Error {
+  issues: string[];
+  warnings: string[];
+  constructor(issues: string[], warnings: string[] = []) {
+    super(issues[0] ?? "Backup validation failed");
+    this.name = "BackupValidationError";
+    this.issues = issues;
+    this.warnings = warnings;
+  }
+}
+
+const carSchema = z.object({
+  id: z.string().min(1, "missing id"),
+  name: z.string().min(1, "missing name").max(120),
+  driver: z.string().max(120),
+  make: z.string().max(80),
+  model: z.string().max(80),
+  weightG: z.number().nonnegative().max(10000),
+  brand: z.string().max(80),
+  photo: z.string().max(2048).optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+  createdAt: z.number().int().nonnegative(),
+});
+
+const matchSchema = z.object({
+  id: z.string().min(1, "missing id"),
+  round: z.number().int().nonnegative(),
+  slot: z.number().int().nonnegative(),
+  bracket: z.enum(["winners", "losers", "final"]).optional(),
+  carAId: z.string().nullable().optional(),
+  carBId: z.string().nullable().optional(),
+  winnerId: z.string().nullable().optional(),
+  isGroup: z.boolean().optional(),
+});
+
+const tournamentSchema = z.object({
+  id: z.string().min(1, "missing id"),
+  name: z.string().min(1, "missing name").max(120),
+  format: z.enum(["single", "double", "round-robin"]),
+  carIds: z.array(z.string()),
+  matches: z.array(matchSchema),
+  createdAt: z.number().int().nonnegative(),
+  champion: z.string().nullable().optional(),
+});
+
+const manifestSchema = z.object({
+  version: z.literal(1),
+  exportedAt: z.number().int().nonnegative(),
+  cars: z.array(z.unknown()),
+  tournaments: z.array(z.unknown()).optional(),
+});
+
 export async function exportBackupZip(cars: Car[], tournaments: Tournament[]): Promise<Blob> {
   const zip = new JSZip();
   const imagesDir = zip.folder("images")!;
@@ -68,39 +121,118 @@ export async function exportBackupZip(cars: Car[], tournaments: Tournament[]): P
   return await zip.generateAsync({ type: "blob" });
 }
 
-export async function importBackupZip(file: File): Promise<{ cars: Car[]; tournaments: Tournament[] }> {
-  const zip = await JSZip.loadAsync(file);
+export async function importBackupZip(
+  file: File,
+): Promise<{ cars: Car[]; tournaments: Tournament[]; warnings: string[] }> {
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(file);
+  } catch {
+    throw new BackupValidationError(["File is not a valid ZIP archive."]);
+  }
   const dataFile = zip.file("data.json");
-  if (!dataFile) throw new Error("Invalid backup: data.json missing");
-  const manifest = JSON.parse(await dataFile.async("string")) as BackupManifest;
-  if (!manifest || !Array.isArray(manifest.cars)) throw new Error("Invalid backup format");
+  if (!dataFile) throw new BackupValidationError(["Backup is missing data.json at the archive root."]);
 
+  const raw = await dataFile.async("string");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new BackupValidationError([`data.json is not valid JSON: ${(e as Error).message}`]);
+  }
+
+  const manifestResult = manifestSchema.safeParse(parsed);
+  if (!manifestResult.success) {
+    throw new BackupValidationError(
+      manifestResult.error.issues.map((i) => `manifest: ${i.path.join(".") || "root"} — ${i.message}`),
+    );
+  }
+  const manifest = manifestResult.data;
+
+  const issues: string[] = [];
+  const warnings: string[] = [];
+  const validCars: Car[] = [];
+  const carIds = new Set<string>();
+
+  manifest.cars.forEach((rawCar, idx) => {
+    const r = carSchema.safeParse(rawCar);
+    if (!r.success) {
+      r.error.issues.forEach((i) =>
+        issues.push(`cars[${idx}]: ${i.path.join(".") || "field"} — ${i.message}`),
+      );
+      return;
+    }
+    if (carIds.has(r.data.id)) {
+      issues.push(`cars[${idx}]: duplicate id "${r.data.id}"`);
+      return;
+    }
+    carIds.add(r.data.id);
+    validCars.push({
+      ...r.data,
+      photo: r.data.photo ?? undefined,
+      notes: r.data.notes ?? undefined,
+    });
+  });
+
+  const validTournaments: Tournament[] = [];
+  const tournamentIds = new Set<string>();
+  (manifest.tournaments ?? []).forEach((rawT, idx) => {
+    const r = tournamentSchema.safeParse(rawT);
+    if (!r.success) {
+      r.error.issues.forEach((i) =>
+        issues.push(`tournaments[${idx}]: ${i.path.join(".") || "field"} — ${i.message}`),
+      );
+      return;
+    }
+    if (tournamentIds.has(r.data.id)) {
+      issues.push(`tournaments[${idx}]: duplicate id "${r.data.id}"`);
+      return;
+    }
+    tournamentIds.add(r.data.id);
+
+    const matchIds = new Set<string>();
+    let matchDup = false;
+    for (const m of r.data.matches) {
+      if (matchIds.has(m.id)) {
+        issues.push(`tournaments[${idx}] "${r.data.name}": duplicate match id "${m.id}"`);
+        matchDup = true;
+        break;
+      }
+      matchIds.add(m.id);
+    }
+    if (matchDup) return;
+
+    const missingRoster = r.data.carIds.filter((id) => !carIds.has(id));
+    if (missingRoster.length > 0) {
+      warnings.push(
+        `tournaments[${idx}] "${r.data.name}": ${missingRoster.length} roster car id(s) not found in cars`,
+      );
+    }
+    validTournaments.push(r.data as Tournament);
+  });
+
+  if (issues.length > 0) throw new BackupValidationError(issues, warnings);
+
+  // Resolve photo refs against the zip
   const cars: Car[] = [];
-  for (const c of manifest.cars) {
-    const id = c.id || uid();
-    let photo: string | undefined = c.photo;
+  for (const c of validCars) {
+    let photo = c.photo;
     if (photo && !photo.startsWith("data:") && !photo.startsWith("http")) {
       const f = zip.file(photo);
       if (f) {
         const ext = photo.split(".").pop()?.toLowerCase() ?? "";
         const mime = Object.entries(MIME_EXT).find(([, e]) => e === ext)?.[0] ?? "image/png";
         const blob = await f.async("blob");
-        const typed = new Blob([blob], { type: mime });
-        photo = await blobToDataUrl(typed);
+        photo = await blobToDataUrl(new Blob([blob], { type: mime }));
       } else {
+        warnings.push(`cars "${c.name}": image file "${photo}" missing from archive`);
         photo = undefined;
       }
     }
-    cars.push({ ...c, id, photo });
+    cars.push({ ...c, photo });
   }
 
-  const tournaments: Tournament[] = (manifest.tournaments ?? []).map((t) => ({
-    ...t,
-    id: t.id || uid(),
-    matches: (t.matches ?? []).map((m) => ({ ...m, id: m.id || uid() })),
-  }));
-
-  return { cars, tournaments };
+  return { cars, tournaments: validTournaments, warnings };
 }
 
 export function downloadBlob(blob: Blob, filename: string) {
