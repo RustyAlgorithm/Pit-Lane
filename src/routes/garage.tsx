@@ -55,7 +55,7 @@ function GaragePage() {
               <Plus className="mr-1 h-4 w-4" /> Add car
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? "Edit car" : "Add a new car"}</DialogTitle>
             </DialogHeader>
