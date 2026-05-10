@@ -84,7 +84,10 @@ export async function importBackupZip(file: File): Promise<{ cars: Car[]; tourna
       if (f) {
         const ext = photo.split(".").pop()?.toLowerCase() ?? "";
         const mime = Object.entries(MIME_EXT).find(([, e]) => e === ext)?.[0] ?? "image/png";
-        const blob = new Blob([await f.async("uint8array")], { type: mime });
+        const blob = await f.async("blob");
+        const typed = new Blob([blob], { type: mime });
+        photo = await blobToDataUrl(typed);
+        continue_marker: ;
         photo = await blobToDataUrl(blob);
       } else {
         photo = undefined;
