@@ -1,0 +1,157 @@
+import { useState, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { generateDriverName } from "@/lib/driver-names";
+import type { Car } from "@/lib/types";
+import { uid } from "@/lib/storage";
+import { Sparkles, Upload, X } from "lucide-react";
+import { toast } from "sonner";
+
+interface Props {
+  initial?: Car;
+  onSave: (car: Car) => void;
+  onCancel: () => void;
+}
+
+const BRANDS = ["Hot Wheels", "Matchbox", "Greenlight", "Maisto", "Auto World", "Johnny Lightning", "Tarmac Works", "Other"];
+
+export function CarForm({ initial, onSave, onCancel }: Props) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [driver, setDriver] = useState(initial?.driver ?? "");
+  const [make, setMake] = useState(initial?.make ?? "");
+  const [model, setModel] = useState(initial?.model ?? "");
+  const [weightG, setWeightG] = useState<number | "">(initial?.weightG ?? "");
+  const [brand, setBrand] = useState(initial?.brand ?? BRANDS[0]);
+  const [photo, setPhoto] = useState<string | undefined>(initial?.photo);
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function handleFile(file: File) {
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be under 2MB");
+      return;
+    }
+    const r = new FileReader();
+    r.onload = () => setPhoto(r.result as string);
+    r.readAsDataURL(file);
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return toast.error("Car name required");
+    onSave({
+      id: initial?.id ?? uid(),
+      name: name.trim().slice(0, 60),
+      driver: driver.trim().slice(0, 60) || generateDriverName(),
+      make: make.trim().slice(0, 40),
+      model: model.trim().slice(0, 40),
+      weightG: typeof weightG === "number" ? weightG : Number(weightG) || 0,
+      brand,
+      photo,
+      notes: notes.trim().slice(0, 300) || undefined,
+      createdAt: initial?.createdAt ?? Date.now(),
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="grid gap-5">
+      <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
+        <div>
+          <Label className="mb-2 block">Photo</Label>
+          <div className="relative aspect-square overflow-hidden rounded-xl border-2 border-dashed border-border bg-secondary/40">
+            {photo ? (
+              <>
+                <img src={photo} alt="" className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setPhoto(undefined)}
+                  className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-background/90 shadow"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="flex h-full w-full flex-col items-center justify-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <Upload className="h-5 w-5" />
+                Upload
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+          />
+        </div>
+
+        <div className="grid gap-3">
+          <div>
+            <Label htmlFor="name">Car name</Label>
+            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Crimson Reaper" maxLength={60} />
+          </div>
+          <div>
+            <Label htmlFor="driver">Driver</Label>
+            <div className="flex gap-2">
+              <Input id="driver" value={driver} onChange={(e) => setDriver(e.target.value)} placeholder="Driver name" maxLength={60} />
+              <Button type="button" variant="outline" onClick={() => setDriver(generateDriverName())} title="Generate name">
+                <Sparkles className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="make">Make</Label>
+          <Input id="make" value={make} onChange={(e) => setMake(e.target.value)} placeholder="Ford" maxLength={40} />
+        </div>
+        <div>
+          <Label htmlFor="model">Model</Label>
+          <Input id="model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Mustang" maxLength={40} />
+        </div>
+        <div>
+          <Label htmlFor="weight">Weight (g)</Label>
+          <Input
+            id="weight"
+            type="number"
+            min={0}
+            max={500}
+            value={weightG}
+            onChange={(e) => setWeightG(e.target.value === "" ? "" : Number(e.target.value))}
+            placeholder="e.g. 35"
+          />
+        </div>
+        <div>
+          <Label htmlFor="brand">Brand</Label>
+          <select
+            id="brand"
+            value={brand}
+            onChange={(e) => setBrand(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            {BRANDS.map((b) => <option key={b}>{b}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="notes">Notes</Label>
+        <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={300} rows={2} placeholder="Custom paint, mods, history..." />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="submit">{initial ? "Save" : "Add car"}</Button>
+      </div>
+    </form>
+  );
+}
