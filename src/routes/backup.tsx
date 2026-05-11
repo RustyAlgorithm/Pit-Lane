@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useLocalStorage } from "@/lib/storage";
-import type { Car, Tournament } from "@/lib/types";
+import type { Car, Tournament, Team } from "@/lib/types";
 import { exportBackupZip, importBackupZip, downloadBlob, BackupValidationError } from "@/lib/backup";
 import { Download, Upload, Database, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -33,14 +33,15 @@ type Mode = "replace" | "merge";
 function BackupPage() {
   const [cars, setCars] = useLocalStorage<Car[]>("pitlane.cars", []);
   const [tournaments, setTournaments] = useLocalStorage<Tournament[]>("pitlane.tournaments", []);
+  const [teams, setTeams] = useLocalStorage<Team[]>("pitlane.teams", []);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [pending, setPending] = useState<{ cars: Car[]; tournaments: Tournament[]; warnings: string[] } | null>(null);
+  const [pending, setPending] = useState<{ cars: Car[]; tournaments: Tournament[]; teams: Team[]; warnings: string[] } | null>(null);
   const [mode, setMode] = useState<Mode>("replace");
   const [errorReport, setErrorReport] = useState<{ issues: string[]; warnings: string[] } | null>(null);
 
   async function doExport() {
     try {
-      const blob = await exportBackupZip(cars, tournaments);
+      const blob = await exportBackupZip(cars, tournaments, teams);
       const stamp = new Date().toISOString().slice(0, 10);
       downloadBlob(blob, `pitlane-backup-${stamp}.zip`);
       toast.success("Backup downloaded");
@@ -71,6 +72,7 @@ function BackupPage() {
     if (mode === "replace") {
       setCars(pending.cars);
       setTournaments(pending.tournaments);
+      setTeams(pending.teams);
     } else {
       setCars((prev) => {
         const ids = new Set(prev.map((c) => c.id));
@@ -80,8 +82,12 @@ function BackupPage() {
         const ids = new Set(prev.map((t) => t.id));
         return [...prev, ...pending.tournaments.filter((t) => !ids.has(t.id))];
       });
+      setTeams((prev) => {
+        const ids = new Set(prev.map((t) => t.id));
+        return [...prev, ...pending.teams.filter((t) => !ids.has(t.id))];
+      });
     }
-    toast.success(`Imported ${pending.cars.length} cars, ${pending.tournaments.length} tournaments`);
+    toast.success(`Imported ${pending.cars.length} cars, ${pending.tournaments.length} tournaments, ${pending.teams.length} teams`);
     setPending(null);
   }
 
@@ -102,6 +108,8 @@ function BackupPage() {
             <dd className="text-right font-medium">{cars.length}</dd>
             <dt className="text-muted-foreground">Tournaments</dt>
             <dd className="text-right font-medium">{tournaments.length}</dd>
+            <dt className="text-muted-foreground">Teams</dt>
+            <dd className="text-right font-medium">{teams.length}</dd>
           </dl>
         </Card>
 
@@ -110,7 +118,7 @@ function BackupPage() {
           <p className="mt-1 text-xs text-muted-foreground">
             Photos are renamed using each car's unique ID.
           </p>
-          <Button onClick={doExport} className="mt-3 w-full" disabled={cars.length === 0 && tournaments.length === 0}>
+          <Button onClick={doExport} className="mt-3 w-full" disabled={cars.length === 0 && tournaments.length === 0 && teams.length === 0}>
             <Download className="mr-1 h-4 w-4" /> Download ZIP
           </Button>
         </Card>
@@ -164,7 +172,8 @@ function BackupPage() {
               <div className="space-y-3">
                 <div>
                   Backup contains <strong>{pending?.cars.length ?? 0}</strong> cars and{" "}
-                  <strong>{pending?.tournaments.length ?? 0}</strong> tournaments.
+                  <strong>{pending?.tournaments.length ?? 0}</strong> tournaments,{" "}
+                  <strong>{pending?.teams.length ?? 0}</strong> teams.
                 </div>
                 {pending && pending.warnings.length > 0 && (
                   <div className="rounded-lg border border-border bg-secondary/40 p-3">
