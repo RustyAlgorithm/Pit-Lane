@@ -17,6 +17,7 @@ function nextPow2(n: number) {
 }
 
 export function buildMatches(format: BracketFormat, carIds: string[]): Match[] {
+  if (format === "time-trial") return [];
   if (carIds.length < 2) return [];
   const ids = shuffle(carIds);
 

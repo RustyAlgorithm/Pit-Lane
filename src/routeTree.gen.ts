@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as GarageRouteImport } from './routes/garage'
 import { Route as BackupRouteImport } from './routes/backup'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TournamentsIndexRouteImport } from './routes/tournaments.index'
 import { Route as TournamentsIdRouteImport } from './routes/tournaments.$id'
 
+const LeaderboardRoute = LeaderboardRouteImport.update({
+  id: '/leaderboard',
+  path: '/leaderboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GarageRoute = GarageRouteImport.update({
   id: '/garage',
   path: '/garage',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/backup': typeof BackupRoute
   '/garage': typeof GarageRoute
+  '/leaderboard': typeof LeaderboardRoute
   '/tournaments/$id': typeof TournamentsIdRoute
   '/tournaments/': typeof TournamentsIndexRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/backup': typeof BackupRoute
   '/garage': typeof GarageRoute
+  '/leaderboard': typeof LeaderboardRoute
   '/tournaments/$id': typeof TournamentsIdRoute
   '/tournaments': typeof TournamentsIndexRoute
 }
@@ -60,19 +68,33 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/backup': typeof BackupRoute
   '/garage': typeof GarageRoute
+  '/leaderboard': typeof LeaderboardRoute
   '/tournaments/$id': typeof TournamentsIdRoute
   '/tournaments/': typeof TournamentsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/backup' | '/garage' | '/tournaments/$id' | '/tournaments/'
+  fullPaths:
+    | '/'
+    | '/backup'
+    | '/garage'
+    | '/leaderboard'
+    | '/tournaments/$id'
+    | '/tournaments/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/backup' | '/garage' | '/tournaments/$id' | '/tournaments'
+  to:
+    | '/'
+    | '/backup'
+    | '/garage'
+    | '/leaderboard'
+    | '/tournaments/$id'
+    | '/tournaments'
   id:
     | '__root__'
     | '/'
     | '/backup'
     | '/garage'
+    | '/leaderboard'
     | '/tournaments/$id'
     | '/tournaments/'
   fileRoutesById: FileRoutesById
@@ -81,12 +103,20 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BackupRoute: typeof BackupRoute
   GarageRoute: typeof GarageRoute
+  LeaderboardRoute: typeof LeaderboardRoute
   TournamentsIdRoute: typeof TournamentsIdRoute
   TournamentsIndexRoute: typeof TournamentsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/leaderboard': {
+      id: '/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/leaderboard'
+      preLoaderRoute: typeof LeaderboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/garage': {
       id: '/garage'
       path: '/garage'
@@ -129,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BackupRoute: BackupRoute,
   GarageRoute: GarageRoute,
+  LeaderboardRoute: LeaderboardRoute,
   TournamentsIdRoute: TournamentsIdRoute,
   TournamentsIndexRoute: TournamentsIndexRoute,
 }
