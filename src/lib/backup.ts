@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 import { z } from "zod";
-import type { Car, Tournament } from "./types";
+import type { Car, Tournament, Team } from "./types";
 import { uid } from "./storage";
 
 const MIME_EXT: Record<string, string> = {
@@ -37,6 +37,7 @@ export interface BackupManifest {
   exportedAt: number;
   cars: Car[]; // photo replaced with `images/<id>.<ext>` path
   tournaments: Tournament[];
+  teams?: Team[];
 }
 
 export class BackupValidationError extends Error {
@@ -96,14 +97,24 @@ const tournamentSchema = z.object({
     .optional(),
 });
 
+const teamSchema = z.object({
+  id: z.string().min(1, "missing id"),
+  name: z.string().min(1, "missing name").max(80),
+  color: z.string().min(1).max(32),
+  carIds: z.array(z.string()),
+  notes: z.string().max(500).optional().nullable(),
+  createdAt: z.number().int().nonnegative(),
+});
+
 const manifestSchema = z.object({
   version: z.literal(1),
   exportedAt: z.number().int().nonnegative(),
   cars: z.array(z.unknown()),
   tournaments: z.array(z.unknown()).optional(),
+  teams: z.array(z.unknown()).optional(),
 });
 
-export async function exportBackupZip(cars: Car[], tournaments: Tournament[]): Promise<Blob> {
+export async function exportBackupZip(cars: Car[], tournaments: Tournament[], teams: Team[] = []): Promise<Blob> {
   const zip = new JSZip();
   const imagesDir = zip.folder("images")!;
 
@@ -128,6 +139,7 @@ export async function exportBackupZip(cars: Car[], tournaments: Tournament[]): P
     exportedAt: Date.now(),
     cars: carsOut,
     tournaments,
+    teams,
   };
   zip.file("data.json", JSON.stringify(manifest, null, 2));
   return await zip.generateAsync({ type: "blob" });
@@ -135,7 +147,7 @@ export async function exportBackupZip(cars: Car[], tournaments: Tournament[]): P
 
 export async function importBackupZip(
   file: File,
-): Promise<{ cars: Car[]; tournaments: Tournament[]; warnings: string[] }> {
+): Promise<{ cars: Car[]; tournaments: Tournament[]; teams: Team[]; warnings: string[] }> {
   let zip: JSZip;
   try {
     zip = await JSZip.loadAsync(file);
@@ -223,6 +235,28 @@ export async function importBackupZip(
     validTournaments.push(r.data as Tournament);
   });
 
+  const validTeams: Team[] = [];
+  const teamIds = new Set<string>();
+  (((manifest as unknown) as { teams?: unknown[] }).teams ?? []).forEach((rawT, idx) => {
+    const r = teamSchema.safeParse(rawT);
+    if (!r.success) {
+      r.error.issues.forEach((i) =>
+        issues.push(`teams[${idx}]: ${i.path.join(".") || "field"} — ${i.message}`),
+      );
+      return;
+    }
+    if (teamIds.has(r.data.id)) {
+      issues.push(`teams[${idx}]: duplicate id "${r.data.id}"`);
+      return;
+    }
+    teamIds.add(r.data.id);
+    const missing = r.data.carIds.filter((id) => !carIds.has(id));
+    if (missing.length > 0) {
+      warnings.push(`teams[${idx}] "${r.data.name}": ${missing.length} member car id(s) not found`);
+    }
+    validTeams.push({ ...r.data, notes: r.data.notes ?? undefined });
+  });
+
   if (issues.length > 0) throw new BackupValidationError(issues, warnings);
 
   // Resolve photo refs against the zip
@@ -244,7 +278,7 @@ export async function importBackupZip(
     cars.push({ ...c, photo });
   }
 
-  return { cars, tournaments: validTournaments, warnings };
+  return { cars, tournaments: validTournaments, teams: validTeams, warnings };
 }
 
 export function downloadBlob(blob: Blob, filename: string) {
