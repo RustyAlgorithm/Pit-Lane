@@ -77,11 +77,23 @@ const matchSchema = z.object({
 const tournamentSchema = z.object({
   id: z.string().min(1, "missing id"),
   name: z.string().min(1, "missing name").max(120),
-  format: z.enum(["single", "double", "round-robin"]),
+  format: z.enum(["single", "double", "round-robin", "time-trial"]),
   carIds: z.array(z.string()),
   matches: z.array(matchSchema),
   createdAt: z.number().int().nonnegative(),
   champion: z.string().nullable().optional(),
+  trackLength: z.number().positive().max(100000).optional(),
+  trackUnit: z.enum(["cm", "m", "ft"]).optional(),
+  times: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        carId: z.string().min(1),
+        seconds: z.number().positive().max(86400),
+        recordedAt: z.number().int().nonnegative(),
+      }),
+    )
+    .optional(),
 });
 
 const manifestSchema = z.object({
