@@ -10,6 +10,7 @@ import { Sparkles, Upload, X, Crop } from "lucide-react";
 import { toast } from "sonner";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 import { fileToDataUrl } from "@/lib/image";
+import { TeamPicker } from "@/components/TeamPicker";
 
 interface Props {
   initial?: Car;
@@ -20,6 +21,7 @@ interface Props {
 const BRANDS = ["Hot Wheels", "Matchbox", "Greenlight", "Maisto", "Auto World", "Johnny Lightning", "Tarmac Works", "Other"];
 
 export function CarForm({ initial, onSave, onCancel }: Props) {
+  const [carId] = useState(() => initial?.id ?? uid());
   const [name, setName] = useState(initial?.name ?? "");
   const [driver, setDriver] = useState(initial?.driver ?? "");
   const [make, setMake] = useState(initial?.make ?? "");
@@ -50,7 +52,7 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
     e.preventDefault();
     if (!name.trim()) return toast.error("Car name required");
     onSave({
-      id: initial?.id ?? uid(),
+      id: carId,
       name: name.trim().slice(0, 60),
       driver: driver.trim().slice(0, 60) || generateDriverName(),
       make: make.trim().slice(0, 40),
@@ -176,6 +178,11 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
       <div>
         <Label htmlFor="notes">Notes</Label>
         <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={300} rows={2} placeholder="Custom paint, mods, history..." />
+      </div>
+
+      <div>
+        <Label className="mb-2 block">Teams</Label>
+        <TeamPicker carId={carId} />
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
