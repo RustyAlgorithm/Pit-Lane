@@ -1,4 +1,13 @@
-export type BracketFormat = "single" | "double" | "round-robin";
+export type BracketFormat = "single" | "double" | "round-robin" | "time-trial";
+
+export type TrackUnit = "cm" | "m" | "ft";
+
+export interface TimeEntry {
+  id: string;
+  carId: string;
+  seconds: number;
+  recordedAt: number;
+}
 
 export interface Car {
   id: string;
@@ -33,4 +42,8 @@ export interface Tournament {
   matches: Match[];
   createdAt: number;
   champion?: string | null;
+  // time-trial only
+  trackLength?: number;
+  trackUnit?: TrackUnit;
+  times?: TimeEntry[];
 }
