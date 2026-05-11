@@ -1,8 +1,12 @@
 import type { Car } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Car as CarIcon } from "lucide-react";
+import { useLocalStorage } from "@/lib/storage";
+import type { Team } from "@/lib/types";
 
 export function CarCard({ car, onClick, selected }: { car: Car; onClick?: () => void; selected?: boolean }) {
+  const [teams] = useLocalStorage<Team[]>("pitlane.teams", []);
+  const memberOf = teams.filter((t) => t.carIds.includes(car.id));
   return (
     <Card
       onClick={onClick}
@@ -25,6 +29,16 @@ export function CarCard({ car, onClick, selected }: { car: Car; onClick?: () => 
         <div className="mt-0.5 text-xs text-muted-foreground">
           {[car.make, car.model].filter(Boolean).join(" ") || "—"}
         </div>
+        {memberOf.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {memberOf.map((t) => (
+              <span key={t.id} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: `${t.color}22`, color: t.color }}>
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: t.color }} />
+                {t.name}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="mt-2 flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Driver</span>
           <span className="font-medium">{car.driver || "—"}</span>

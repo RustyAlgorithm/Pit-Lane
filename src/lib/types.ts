@@ -47,3 +47,12 @@ export interface Tournament {
   trackUnit?: TrackUnit;
   times?: TimeEntry[];
 }
+
+export interface Team {
+  id: string;
+  name: string;
+  color: string; // hex like "#ef4444"
+  carIds: string[];
+  notes?: string;
+  createdAt: number;
+}
