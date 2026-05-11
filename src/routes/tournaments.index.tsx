@@ -26,6 +26,7 @@ const FORMAT_LABEL: Record<BracketFormat, string> = {
   single: "Single elimination",
   double: "Double elimination",
   "round-robin": "Round-robin",
+  "time-trial": "Time trial",
 };
 
 function TournamentsPage() {
@@ -35,6 +36,8 @@ function TournamentsPage() {
   const [name, setName] = useState("");
   const [format, setFormat] = useState<BracketFormat>("single");
   const [picked, setPicked] = useState<string[]>([]);
+  const [trackLength, setTrackLength] = useState<string>("200");
+  const [trackUnit, setTrackUnit] = useState<"cm" | "m" | "ft">("cm");
   const navigate = useNavigate();
 
   function toggle(id: string) {
@@ -43,7 +46,15 @@ function TournamentsPage() {
 
   function create() {
     if (!name.trim()) return toast.error("Tournament name required");
-    if (picked.length < 2) return toast.error("Pick at least 2 cars");
+    const minCars = format === "time-trial" ? 1 : 2;
+    if (picked.length < minCars)
+      return toast.error(format === "time-trial" ? "Pick at least 1 car" : "Pick at least 2 cars");
+    let trackLengthNum: number | undefined;
+    if (format === "time-trial") {
+      trackLengthNum = Number(trackLength);
+      if (!Number.isFinite(trackLengthNum) || trackLengthNum <= 0)
+        return toast.error("Enter a valid track length");
+    }
     const t: Tournament = {
       id: uid(),
       name: name.trim().slice(0, 60),
@@ -52,6 +63,9 @@ function TournamentsPage() {
       matches: buildMatches(format, picked),
       createdAt: Date.now(),
       champion: null,
+      ...(format === "time-trial"
+        ? { trackLength: trackLengthNum, trackUnit, times: [] }
+        : {}),
     };
     setTournaments((prev) => [t, ...prev]);
     setOpen(false);
@@ -100,9 +114,40 @@ function TournamentsPage() {
                     <option value="single">Single elimination</option>
                     <option value="double">Double elimination</option>
                     <option value="round-robin">Round-robin</option>
+                    <option value="time-trial">Time trial</option>
                   </select>
                 </div>
               </div>
+
+              {format === "time-trial" && (
+                <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
+                  <div>
+                    <Label htmlFor="tlen">Track length</Label>
+                    <Input
+                      id="tlen"
+                      type="number"
+                      min={1}
+                      step="any"
+                      value={trackLength}
+                      onChange={(e) => setTrackLength(e.target.value)}
+                      placeholder="200"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="tunit">Unit</Label>
+                    <select
+                      id="tunit"
+                      value={trackUnit}
+                      onChange={(e) => setTrackUnit(e.target.value as "cm" | "m" | "ft")}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="cm">cm</option>
+                      <option value="m">m</option>
+                      <option value="ft">ft</option>
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <div className="mb-2 flex items-baseline justify-between">
