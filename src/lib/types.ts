@@ -29,7 +29,10 @@ export interface Match {
   bracket?: "winners" | "losers" | "final";
   carAId?: string | null;
   carBId?: string | null;
+  teamAId?: string | null;
+  teamBId?: string | null;
   winnerId?: string | null;
+  winnerType?: "car" | "team" | null;
   // round-robin only
   isGroup?: boolean;
 }
@@ -38,10 +41,13 @@ export interface Tournament {
   id: string;
   name: string;
   format: BracketFormat;
-  carIds: string[];
+  participationType: "cars" | "teams";
+  carIds?: string[];
+  teamIds?: string[];
   matches: Match[];
   createdAt: number;
   champion?: string | null;
+  championType?: "car" | "team" | null;
   // time-trial only
   trackLength?: number;
   trackUnit?: TrackUnit;
@@ -53,6 +59,7 @@ export interface Team {
   name: string;
   color: string; // hex like "#ef4444"
   carIds: string[];
+  sponsor?: string;
   notes?: string;
   createdAt: number;
 }

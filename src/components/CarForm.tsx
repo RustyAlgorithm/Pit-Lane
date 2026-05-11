@@ -50,10 +50,14 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return toast.error("Car name required");
+    const trimmedName = name.trim() || `${make.trim()} ${model.trim()}`.trim();
+
+    if (!trimmedName) {
+      return toast.error("Car name required");
+}
     onSave({
       id: carId,
-      name: name.trim().slice(0, 60),
+      name: trimmedName.slice(0, 60),
       driver: driver.trim().slice(0, 60) || generateDriverName(),
       make: make.trim().slice(0, 40),
       model: model.trim().slice(0, 40),

@@ -16,10 +16,11 @@ function nextPow2(n: number) {
   return p;
 }
 
-export function buildMatches(format: BracketFormat, carIds: string[]): Match[] {
+export function buildMatches(format: BracketFormat, participantIds: string[], participationType: "cars" | "teams" = "cars"): Match[] {
   if (format === "time-trial") return [];
-  if (carIds.length < 2) return [];
-  const ids = shuffle(carIds);
+  if (participantIds.length < 2) return [];
+  const ids = shuffle(participantIds);
+  const isTeams = participationType === "teams";
 
   if (format === "round-robin") {
     const matches: Match[] = [];
@@ -31,8 +32,7 @@ export function buildMatches(format: BracketFormat, carIds: string[]): Match[] {
           round: 1,
           slot: slot++,
           isGroup: true,
-          carAId: ids[i],
-          carBId: ids[j],
+          ...(isTeams ? { teamAId: ids[i], teamBId: ids[j] } : { carAId: ids[i], carBId: ids[j] }),
           winnerId: null,
         });
       }
@@ -50,14 +50,18 @@ export function buildMatches(format: BracketFormat, carIds: string[]): Match[] {
   for (let i = 0; i < size / 2; i++) {
     const a = seeded[i * 2];
     const b = seeded[i * 2 + 1];
-    matches.push({
+    const baseMatch = {
       id: uid(),
       round: 1,
       slot: i,
-      bracket: format === "double" ? "winners" : undefined,
-      carAId: a,
-      carBId: b,
+      bracket: format === "double" ? "winners" as const : undefined,
       winnerId: a && !b ? a : b && !a ? b : null,
+    };
+    matches.push({
+      ...baseMatch,
+      ...(isTeams 
+        ? { teamAId: a, teamBId: b } 
+        : { carAId: a, carBId: b }),
     });
   }
   // subsequent winners-rounds (empty placeholders)
@@ -65,14 +69,18 @@ export function buildMatches(format: BracketFormat, carIds: string[]): Match[] {
   let round = 2;
   while (prev > 1) {
     for (let i = 0; i < prev / 2; i++) {
-      matches.push({
+      const baseMatch = {
         id: uid(),
         round,
         slot: i,
-        bracket: format === "double" ? "winners" : undefined,
-        carAId: null,
-        carBId: null,
+        bracket: format === "double" ? "winners" as const : undefined,
         winnerId: null,
+      };
+      matches.push({
+        ...baseMatch,
+        ...(isTeams 
+          ? { teamAId: null, teamBId: null } 
+          : { carAId: null, carBId: null }),
       });
     }
     prev = prev / 2;
@@ -83,25 +91,33 @@ export function buildMatches(format: BracketFormat, carIds: string[]): Match[] {
     // simple losers bracket: one match per winners round (linear, not bracket-perfect but playable)
     const winnersRounds = Math.log2(size);
     for (let r = 1; r <= winnersRounds; r++) {
-      matches.push({
+      const baseMatch = {
         id: uid(),
         round: r,
         slot: 0,
-        bracket: "losers",
-        carAId: null,
-        carBId: null,
+        bracket: "losers" as const,
         winnerId: null,
+      };
+      matches.push({
+        ...baseMatch,
+        ...(isTeams 
+          ? { teamAId: null, teamBId: null } 
+          : { carAId: null, carBId: null }),
       });
     }
     // grand final
-    matches.push({
+    const grandFinal = {
       id: uid(),
       round: winnersRounds + 1,
       slot: 0,
-      bracket: "final",
-      carAId: null,
-      carBId: null,
+      bracket: "final" as const,
       winnerId: null,
+    };
+    matches.push({
+      ...grandFinal,
+      ...(isTeams 
+        ? { teamAId: null, teamBId: null } 
+        : { carAId: null, carBId: null }),
     });
   }
 

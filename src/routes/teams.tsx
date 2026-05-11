@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Team, Car } from "@/lib/types";
 import { CarCard } from "@/components/CarCard";
-import { Plus, Trash2, Pencil, Users, Check } from "lucide-react";
+import { Plus, Trash2, Pencil, Users, Check, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/teams")({
@@ -23,25 +23,86 @@ export const Route = createFileRoute("/teams")({
 
 const PALETTE = ["#ef4444","#f97316","#eab308","#22c55e","#06b6d4","#3b82f6","#8b5cf6","#ec4899"];
 
+const TEAM_NAMES = ["Velocity", "Thunder", "Phoenix", "Vortex", "Apex", "Inferno", "Nexus", "Catalyst", "Prism", "Blaze", "Storm", "Quantum", "Sonic", "Turbo", "Nitro", "Fusion", "Titan", "Crown", "Elite", "Razor"];
+const SPONSOR_NAMES = ["Red Bull", "Monster", "Motul", "Shell", "Pirelli", "Michelin", "Bridgestone", "Continental", "Dunlop", "Goodyear", "Castrol", "Mobil", "Esso", "Total", "BP", "Pertamina", "Pennzoil", "Valvoline"];
+
+function getRandomTeamName(): string {
+  return TEAM_NAMES[Math.floor(Math.random() * TEAM_NAMES.length)];
+}
+
+function getRandomSponsorName(): string {
+  return SPONSOR_NAMES[Math.floor(Math.random() * SPONSOR_NAMES.length)];
+}
+
+// Extract dominant color from an image
+async function extractDominantColor(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject("Could not get canvas context");
+        ctx.drawImage(img, 0, 0, 1, 1);
+        const imageData = ctx.getImageData(0, 0, 1, 1);
+        const [r, g, b] = imageData.data;
+        const hex = "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
+        resolve(hex);
+      };
+      img.onerror = () => reject("Could not load image");
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject("Could not read file");
+    reader.readAsDataURL(file);
+  });
+}
+
 function TeamsPage() {
   const [teams, setTeams] = useLocalStorage<Team[]>("pitlane.teams", []);
   const [cars] = useLocalStorage<Car[]>("pitlane.cars", []);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Team | undefined>();
   const [name, setName] = useState("");
+  const [sponsor, setSponsor] = useState("");
   const [color, setColor] = useState(PALETTE[0]);
   const [picked, setPicked] = useState<string[]>([]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [isLoadingImage, setIsLoadingImage] = useState(false);
 
   function openNew() {
     setEditing(undefined);
     setName("");
+    setSponsor("");
     setColor(PALETTE[Math.floor(Math.random() * PALETTE.length)]);
     setPicked([]);
     setOpen(true);
   }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsLoadingImage(true);
+    try {
+      const dominantColor = await extractDominantColor(file);
+      setColor(dominantColor);
+    } catch (err) {
+      console.error("Failed to extract color from image:", err);
+    } finally {
+      setIsLoadingImage(false);
+      if (imageInputRef.current) {
+        imageInputRef.current.value = "";
+      }
+    }
+  }
+
   function openEdit(t: Team) {
     setEditing(t);
     setName(t.name);
+    setSponsor(t.sponsor || "");
     setColor(t.color);
     setPicked(t.carIds);
     setOpen(true);
@@ -49,10 +110,10 @@ function TeamsPage() {
   function save() {
     if (!name.trim()) return toast.error("Team name required");
     if (editing) {
-      setTeams((prev) => prev.map((t) => (t.id === editing.id ? { ...t, name: name.trim().slice(0, 40), color, carIds: picked } : t)));
+      setTeams((prev) => prev.map((t) => (t.id === editing.id ? { ...t, name: name.trim().slice(0, 40), color, sponsor: sponsor.trim() || undefined, carIds: picked } : t)));
       toast.success("Team updated");
     } else {
-      const t: Team = { id: uid(), name: name.trim().slice(0, 40), color, carIds: picked, createdAt: Date.now() };
+      const t: Team = { id: uid(), name: name.trim().slice(0, 40), color, sponsor: sponsor.trim() || undefined, carIds: picked, createdAt: Date.now() };
       setTeams((prev) => [t, ...prev]);
       toast.success("Team created");
     }
@@ -83,24 +144,77 @@ function TeamsPage() {
               <DialogTitle>{editing ? "Edit team" : "Create team"}</DialogTitle>
             </DialogHeader>
             <div className="grid gap-5">
-              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+              <div className="grid gap-3">
                 <div>
                   <Label htmlFor="tname">Team name</Label>
-                  <Input id="tname" value={name} onChange={(e) => setName(e.target.value)} placeholder="Red Riders" maxLength={40} />
+                  <div className="flex gap-2">
+                    <Input id="tname" value={name} onChange={(e) => setName(e.target.value)} placeholder="Red Riders" maxLength={40} />
+                    <Button type="button" variant="outline" onClick={() => setName(getRandomTeamName())}>
+                      Randomize
+                    </Button>
+                  </div>
                 </div>
                 <div>
+                  <Label htmlFor="sponsor">Sponsor (optional)</Label>
+                  <div className="flex gap-2">
+                    <Input id="sponsor" value={sponsor} onChange={(e) => setSponsor(e.target.value)} placeholder="Monster Energy" maxLength={40} />
+                    <Button type="button" variant="outline" onClick={() => setSponsor(getRandomSponsorName())}>
+                      Randomize
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <div></div>
+                <div>
                   <Label className="mb-2 block">Color</Label>
-                  <div className="flex items-center gap-1">
-                    {PALETTE.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setColor(c)}
-                        className={`h-7 w-7 rounded-full ring-offset-2 ring-offset-background ${color === c ? "ring-2 ring-foreground" : ""}`}
-                        style={{ background: c }}
-                        aria-label={`Color ${c}`}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1 mb-2">
+                      {PALETTE.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setColor(c)}
+                          className={`h-7 w-7 rounded-full ring-offset-2 ring-offset-background ${color === c ? "ring-2 ring-foreground" : ""}`}
+                          style={{ background: c }}
+                          aria-label={`Color ${c}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex items-center gap-1 flex-1">
+                        <input
+                          type="color"
+                          value={color}
+                          onChange={(e) => setColor(e.target.value)}
+                          className="h-8 w-12 rounded cursor-pointer border"
+                          aria-label="Pick a custom color"
+                        />
+                        <span className="text-xs text-muted-foreground font-mono">{color}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        ref={imageInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                        disabled={isLoadingImage}
+                        aria-label="Upload image to extract color"
                       />
-                    ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => imageInputRef.current?.click()}
+                        disabled={isLoadingImage}
+                        className="w-full h-8"
+                      >
+                        <Upload className="h-3.5 w-3.5 mr-1" />
+                        {isLoadingImage ? "Loading..." : "From image"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

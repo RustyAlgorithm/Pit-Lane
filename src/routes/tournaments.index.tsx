@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useLocalStorage, uid } from "@/lib/storage";
-import type { Car, Tournament, BracketFormat } from "@/lib/types";
+import type { Car, Team, Tournament, BracketFormat } from "@/lib/types";
 import { buildMatches } from "@/lib/bracket";
 import { Plus, Trophy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,8 +31,10 @@ const FORMAT_LABEL: Record<BracketFormat, string> = {
 
 function TournamentsPage() {
   const [cars] = useLocalStorage<Car[]>("pitlane.cars", []);
+  const [teams] = useLocalStorage<Team[]>("pitlane.teams", []);
   const [tournaments, setTournaments] = useLocalStorage<Tournament[]>("pitlane.tournaments", []);
   const [open, setOpen] = useState(false);
+  const [participationType, setParticipationType] = useState<"cars" | "teams">("cars");
   const [name, setName] = useState("");
   const [format, setFormat] = useState<BracketFormat>("single");
   const [picked, setPicked] = useState<string[]>([]);
@@ -46,9 +48,9 @@ function TournamentsPage() {
 
   function create() {
     if (!name.trim()) return toast.error("Tournament name required");
-    const minCars = format === "time-trial" ? 1 : 2;
-    if (picked.length < minCars)
-      return toast.error(format === "time-trial" ? "Pick at least 1 car" : "Pick at least 2 cars");
+    const minParticipants = format === "time-trial" ? 1 : 2;
+    if (picked.length < minParticipants)
+      return toast.error(format === "time-trial" ? `Pick at least 1 ${participationType === "cars" ? "car" : "team"}` : `Pick at least 2 ${participationType === "cars" ? "cars" : "teams"}`);
     let trackLengthNum: number | undefined;
     if (format === "time-trial") {
       trackLengthNum = Number(trackLength);
@@ -59,8 +61,9 @@ function TournamentsPage() {
       id: uid(),
       name: name.trim().slice(0, 60),
       format,
-      carIds: picked,
-      matches: buildMatches(format, picked),
+      participationType,
+      ...(participationType === "cars" ? { carIds: picked } : { teamIds: picked }),
+      matches: buildMatches(format, picked, participationType),
       createdAt: Date.now(),
       champion: null,
       ...(format === "time-trial"
@@ -150,24 +153,90 @@ function TournamentsPage() {
               )}
 
               <div>
+                <Label htmlFor="ptype">Participants</Label>
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    type="button"
+                    variant={participationType === "cars" ? "default" : "outline"}
+                    onClick={() => {
+                      setParticipationType("cars");
+                      setPicked([]);
+                    }}
+                    className="flex-1"
+                  >
+                    Cars
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={participationType === "teams" ? "default" : "outline"}
+                    onClick={() => {
+                      setParticipationType("teams");
+                      setPicked([]);
+                    }}
+                    className="flex-1"
+                  >
+                    Teams
+                  </Button>
+                </div>
+              </div>
+
+              <div>
                 <div className="mb-2 flex items-baseline justify-between">
                   <Label>Roster ({picked.length} selected)</Label>
-                  {cars.length > 0 && (
-                    <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setPicked(picked.length === cars.length ? [] : cars.map((c) => c.id))}>
-                      {picked.length === cars.length ? "Clear all" : "Select all"}
+                  {((participationType === "cars" && cars.length > 0) || (participationType === "teams" && teams.length > 0)) && (
+                    <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => {
+                      const totalItems = participationType === "cars" ? cars.length : teams.length;
+                      const itemIds = participationType === "cars" ? cars.map((c) => c.id) : teams.map((t) => t.id);
+                      setPicked(picked.length === totalItems ? [] : itemIds);
+                    }}>
+                      {picked.length === (participationType === "cars" ? cars.length : teams.length) ? "Clear all" : "Select all"}
                     </button>
                   )}
                 </div>
-                {cars.length === 0 ? (
-                  <div className="rounded-lg border-2 border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                    Add cars in the <Link to="/garage" className="font-medium text-primary hover:underline">Garage</Link> first.
-                  </div>
+                {participationType === "cars" ? (
+                  <>
+                    {cars.length === 0 ? (
+                      <div className="rounded-lg border-2 border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                        Add cars in the <Link to="/garage" className="font-medium text-primary hover:underline">Garage</Link> first.
+                      </div>
+                    ) : (
+                      <div className="grid max-h-[40vh] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
+                        {cars.map((c) => (
+                          <CarCard key={c.id} car={c} onClick={() => toggle(c.id)} selected={picked.includes(c.id)} />
+                        ))}
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <div className="grid max-h-[40vh] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
-                    {cars.map((c) => (
-                      <CarCard key={c.id} car={c} onClick={() => toggle(c.id)} selected={picked.includes(c.id)} />
-                    ))}
-                  </div>
+                  <>
+                    {teams.length === 0 ? (
+                      <div className="rounded-lg border-2 border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                        Create teams in <Link to="/teams" className="font-medium text-primary hover:underline">Teams</Link> first.
+                      </div>
+                    ) : (
+                      <div className="grid max-h-[40vh] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
+                        {teams.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => toggle(t.id)}
+                            className={`rounded-lg border-2 p-4 text-left transition-all ${
+                              picked.includes(t.id)
+                                ? "border-primary bg-primary/10"
+                                : "border-border hover:border-primary/50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="h-3 w-3 rounded-full" style={{ background: t.color }} />
+                              <div className="font-semibold text-sm">{t.name}</div>
+                            </div>
+                            {t.sponsor && <div className="text-xs text-muted-foreground">{t.sponsor}</div>}
+                            <div className="text-xs text-muted-foreground mt-2">{t.carIds.length} cars</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -188,19 +257,25 @@ function TournamentsPage() {
       ) : (
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tournaments.map((t) => {
-            const champ = t.champion ? cars.find((c) => c.id === t.champion) : null;
+            const participantCount = t.participationType === "cars" ? (t.carIds?.length || 0) : (t.teamIds?.length || 0);
+            const champName = t.champion 
+              ? (t.championType === "team" 
+                ? teams.find((tm) => tm.id === t.champion)?.name 
+                : cars.find((c) => c.id === t.champion)?.name)
+              : null;
             return (
               <Card key={t.id} className="group flex flex-col p-5 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-elegant)]">
                 <Link to="/tournaments/$id" params={{ id: t.id }} className="flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="text-lg font-semibold leading-tight">{t.name}</h3>
-                    {champ && <Trophy className="h-4 w-4 text-primary" />}
+                    {champName && <Trophy className="h-4 w-4 text-primary" />}
                   </div>
                   <div className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{FORMAT_LABEL[t.format]}</div>
+                  <div className="mt-2 text-xs text-muted-foreground">{t.participationType === "teams" ? "Teams" : "Cars"}</div>
                   <div className="mt-4 flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{t.carIds.length} cars</span>
-                    {champ ? (
-                      <span className="font-semibold text-primary">{champ.name}</span>
+                    <span className="text-muted-foreground">{participantCount} {t.participationType === "teams" ? "teams" : "cars"}</span>
+                    {champName ? (
+                      <span className="font-semibold text-primary">{champName}</span>
                     ) : (
                       <span className="text-muted-foreground">In progress</span>
                     )}
