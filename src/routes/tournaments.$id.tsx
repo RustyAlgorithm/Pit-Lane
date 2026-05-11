@@ -1,10 +1,12 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useLocalStorage } from "@/lib/storage";
-import type { Car, Tournament } from "@/lib/types";
+import { useState } from "react";
+import { useLocalStorage, uid } from "@/lib/storage";
+import type { Car, Tournament, TimeEntry } from "@/lib/types";
 import { applyWinner, standingsFor } from "@/lib/bracket";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Trophy, Car as CarIcon } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/tournaments/$id")({
   component: TournamentDetail,
@@ -89,14 +91,192 @@ function TournamentDetail() {
 
       {t.format === "round-robin" ? (
         <RoundRobin t={t} cars={cars} onPick={pickWinner} />
+      ) : t.format === "time-trial" ? (
+        <TimeTrialView
+          t={t}
+          cars={cars}
+          onChange={(updater) =>
+            setTournaments((prev) => prev.map((x) => (x.id === t!.id ? updater(x) : x)))
+          }
+        />
       ) : (
         <Bracket t={t} carById={carById} onPick={pickWinner} />
       )}
 
       <div className="mt-10 flex justify-end">
-        <Button variant="outline" size="sm" onClick={reset}>Reset results</Button>
+        {t.format !== "time-trial" && (
+          <Button variant="outline" size="sm" onClick={reset}>Reset results</Button>
+        )}
       </div>
     </main>
+  );
+}
+
+function recomputeTTChampion(t: Tournament): Tournament {
+  const best = new Map<string, number>();
+  (t.times ?? []).forEach((e) => {
+    const cur = best.get(e.carId);
+    if (cur === undefined || e.seconds < cur) best.set(e.carId, e.seconds);
+  });
+  let champion: string | null = null;
+  let bestSec = Infinity;
+  best.forEach((sec, carId) => {
+    if (sec < bestSec) {
+      bestSec = sec;
+      champion = carId;
+    }
+  });
+  return { ...t, champion };
+}
+
+function TimeTrialView({
+  t,
+  cars,
+  onChange,
+}: {
+  t: Tournament;
+  cars: Car[];
+  onChange: (updater: (prev: Tournament) => Tournament) => void;
+}) {
+  const [selectedCarId, setSelectedCarId] = useState<string>(t.carIds[0] ?? "");
+  const [secondsInput, setSecondsInput] = useState("");
+
+  const roster = t.carIds
+    .map((id) => cars.find((c) => c.id === id))
+    .filter((c): c is Car => !!c);
+  const times = t.times ?? [];
+  const unit = t.trackUnit ?? "cm";
+
+  function addTime() {
+    const sec = Number(secondsInput);
+    if (!selectedCarId) return;
+    if (!Number.isFinite(sec) || sec <= 0) return;
+    const entry: TimeEntry = {
+      id: uid(),
+      carId: selectedCarId,
+      seconds: sec,
+      recordedAt: Date.now(),
+    };
+    onChange((prev) =>
+      recomputeTTChampion({ ...prev, times: [...(prev.times ?? []), entry] }),
+    );
+    setSecondsInput("");
+  }
+
+  function removeTime(id: string) {
+    onChange((prev) =>
+      recomputeTTChampion({
+        ...prev,
+        times: (prev.times ?? []).filter((e) => e.id !== id),
+      }),
+    );
+  }
+
+  // Best time per car for leaderboard
+  const best = new Map<string, TimeEntry>();
+  times.forEach((e) => {
+    const cur = best.get(e.carId);
+    if (!cur || e.seconds < cur.seconds) best.set(e.carId, e);
+  });
+  const board = roster
+    .map((c) => ({ car: c, best: best.get(c.id) }))
+    .sort((a, b) => {
+      if (!a.best && !b.best) return 0;
+      if (!a.best) return 1;
+      if (!b.best) return -1;
+      return a.best.seconds - b.best.seconds;
+    });
+
+  return (
+    <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
+      <div>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider">
+          <Timer className="h-4 w-4" /> Record a run
+        </h2>
+        <Card className="p-4 shadow-[var(--shadow-card)]">
+          <div className="text-xs text-muted-foreground">
+            Track length: <span className="font-semibold text-foreground tabular-nums">{t.trackLength} {unit}</span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_140px_auto]">
+            <select
+              value={selectedCarId}
+              onChange={(e) => setSelectedCarId(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {roster.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <Input
+              type="number"
+              step="0.001"
+              min={0}
+              placeholder="Seconds"
+              value={secondsInput}
+              onChange={(e) => setSecondsInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addTime()}
+            />
+            <Button onClick={addTime}>Add</Button>
+          </div>
+        </Card>
+
+        <h2 className="mb-3 mt-6 text-sm font-bold uppercase tracking-wider">All runs</h2>
+        {times.length === 0 ? (
+          <div className="rounded-lg border-2 border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+            No times recorded yet.
+          </div>
+        ) : (
+          <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
+            {[...times]
+              .sort((a, b) => b.recordedAt - a.recordedAt)
+              .map((e) => {
+                const c = cars.find((x) => x.id === e.carId);
+                return (
+                  <div
+                    key={e.id}
+                    className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-b-0"
+                  >
+                    <span className="truncate font-medium">{c?.name ?? "Unknown"}</span>
+                    <span className="font-semibold tabular-nums">{e.seconds.toFixed(3)}s</span>
+                    <button
+                      type="button"
+                      onClick={() => removeTime(e.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label="Remove time"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+          </Card>
+        )}
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">Leaderboard</h2>
+        <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
+          <div className="grid grid-cols-[28px_1fr_auto] gap-2 border-b border-border bg-secondary/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span>#</span><span>Car</span><span className="text-right">Best</span>
+          </div>
+          {board.map((row, i) => (
+            <div
+              key={row.car.id}
+              className={`grid grid-cols-[28px_1fr_auto] items-center gap-2 px-3 py-2 text-sm ${i === 0 && row.best ? "bg-primary/5" : ""}`}
+            >
+              <span className="text-xs text-muted-foreground tabular-nums">{i + 1}</span>
+              <span className="flex items-center gap-1.5 truncate font-medium">
+                {i === 0 && row.best && <Trophy className="h-3.5 w-3.5 text-primary" />}
+                <span className="truncate">{row.car.name}</span>
+              </span>
+              <span className="text-right font-semibold tabular-nums">
+                {row.best ? `${row.best.seconds.toFixed(3)}s` : "—"}
+              </span>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
   );
 }
 
