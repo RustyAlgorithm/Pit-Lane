@@ -45,7 +45,9 @@ function TournamentDetail() {
     return (
       <main className="mx-auto max-w-md px-4 py-20 text-center">
         <h1 className="text-2xl font-bold">Tournament not found</h1>
-        <Button asChild className="mt-4"><Link to="/tournaments">Back to tournaments</Link></Button>
+        <Button asChild className="mt-4">
+          <Link to="/tournaments">Back to tournaments</Link>
+        </Button>
       </main>
     );
   }
