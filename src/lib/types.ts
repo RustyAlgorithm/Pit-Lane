@@ -1,4 +1,9 @@
-export type BracketFormat = "single" | "double" | "round-robin" | "time-trial";
+export type BracketFormat =
+  | "single"
+  | "double"
+  | "round-robin"
+  | "time-trial"
+  | "championship";
 
 export type TrackUnit = "cm" | "m" | "ft";
 
@@ -53,6 +58,13 @@ export interface Tournament {
   trackLength?: number;
   trackUnit?: TrackUnit;
   times?: TimeEntry[];
+  // championship only
+  qualifyingType?: "time-trial" | "round-robin";
+  qualifyingFormat?: "single" | "double";
+  advanceCount?: number; // power of 2
+  qualifyingMatches?: Match[];
+  qualifyingLocked?: boolean;
+  seeds?: { participantId: string; seed: number }[];
 }
 
 export interface Team {
