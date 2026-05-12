@@ -1,4 +1,4 @@
-import type { Car, Match, Tournament, BracketFormat } from "./types";
+import type { Car, Match, Tournament, BracketFormat, Team } from "./types";
 import { uid } from "./storage";
 
 function shuffle<T>(arr: T[]): T[] {
@@ -230,13 +230,14 @@ export function applyWinner(t: Tournament, matchId: string, winnerId: string): T
   return { ...t, matches };
 }
 
-export function standingsFor(t: Tournament, cars: Car[]) {
+export function standingsFor(t: Tournament, cars: Car[], teams: Team[] = []) {
   const map = new Map<string, { name: string; w: number; l: number }>();
   const isTeams = t.participationType === "teams";
   
   if (isTeams) {
     (t.teamIds ?? []).forEach((id) => {
-      map.set(id, { name: "", w: 0, l: 0 });
+      const team = teams.find((entry) => entry.id === id);
+      map.set(id, { name: team?.name ?? "", w: 0, l: 0 });
     });
   } else {
     (t.carIds ?? []).forEach((id) => {

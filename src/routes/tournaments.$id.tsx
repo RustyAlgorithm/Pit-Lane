@@ -3,11 +3,13 @@ import { useState } from "react";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Tournament, TimeEntry, Team } from "@/lib/types";
 import { applyWinner, standingsFor, buildSeededBracket, rankQualifiers } from "@/lib/bracket";
+import { getTournamentPlacements } from "@/lib/tournamentPlacements";
 import { toast } from "sonner";
+import { TournamentCertificateDialog } from "@/components/TournamentCertificateDialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2 } from "lucide-react";
+import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download } from "lucide-react";
 
 export const Route = createFileRoute("/tournaments/$id")({
   component: TournamentDetail,
@@ -41,6 +43,7 @@ function TournamentDetail() {
   const [tournaments, setTournaments] = useLocalStorage<Tournament[]>("pitlane.tournaments", []);
   const [cars, setCars] = useLocalStorage<Car[]>("pitlane.cars", []);
   const [teams, setTeams] = useLocalStorage<Team[]>("pitlane.teams", []);
+  const [certificateOpen, setCertificateOpen] = useState(false);
   const t = tournaments.find((x) => x.id === id);
 
   if (!t) {
@@ -54,35 +57,38 @@ function TournamentDetail() {
     );
   }
 
+  const tournament = t;
   const carById = (cid?: string | null) => (cid ? cars.find((c) => c.id === cid) : undefined);
   const teamById = (tid?: string | null) => (tid ? teams.find((tm) => tm.id === tid) : undefined);
-  const champ = t.champion ? (t.championType === "team" ? teamById(t.champion) : carById(t.champion)) : null;
+  const championCar =
+    tournament.champion && tournament.championType === "car"
+      ? carById(tournament.champion)
+      : undefined;
+  const championTeam =
+    tournament.champion && tournament.championType === "team"
+      ? teamById(tournament.champion)
+      : undefined;
+  const champ = championTeam ?? championCar ?? null;
+  const certificatePlacements = getTournamentPlacements(tournament, cars, teams);
 
   // Check if all round-robin matches are complete
-  const allRoundRobinComplete = t.format === "round-robin" && t.matches.every((m) => m.winnerId !== null);
+  const allRoundRobinComplete =
+    tournament.format === "round-robin" && tournament.matches.every((m) => m.winnerId !== null);
 
   function endRoundRobin() {
-    // Get standings to find the champion (first place)
-    const standings = standingsFor(t, cars);
-    if (standings.length === 0) return;
-    
-    const championStanding = standings[0];
-    
-    // Find the champion ID
-    let championId: string | null = null;
-    if (t.participationType === "teams") {
-      const teamIds = t.teamIds ?? [];
-      championId = teamIds.find((id) => teams.find((tm) => tm.id === id)?.name === championStanding.name) ?? null;
-    } else {
-      const carIds = t.carIds ?? [];
-      championId = carIds.find((id) => cars.find((c) => c.id === id)?.name === championStanding.name) ?? null;
-    }
+    const championId =
+      getTournamentPlacements(tournament, cars, teams).find((placement) => placement.place === 1)
+        ?.participantId ?? null;
 
     if (championId) {
       setTournaments((prev) =>
         prev.map((x) =>
-          x.id === t.id
-            ? { ...x, champion: championId, championType: t.participationType === "teams" ? "team" : "car" }
+          x.id === tournament.id
+            ? {
+                ...x,
+                champion: championId,
+                championType: tournament.participationType === "teams" ? "team" : "car",
+              }
             : x,
         ),
       );
@@ -91,20 +97,25 @@ function TournamentDetail() {
   }
 
   function resetForNextSeason() {
-    if (!t.champion || !t.championType) return;
+    if (!tournament.champion || !tournament.championType) return;
     
     // Archive the current champion
-    const season = (t.previousSeasons?.length ?? 0) + 1;
+    const season = (tournament.previousSeasons?.length ?? 0) + 1;
     const newPreviousSeasons = [
-      ...(t.previousSeasons ?? []),
-      { season, champion: t.champion, championType: t.championType, dateEnded: Date.now() },
+      ...(tournament.previousSeasons ?? []),
+      {
+        season,
+        champion: tournament.champion,
+        championType: tournament.championType,
+        dateEnded: Date.now(),
+      },
     ];
 
     // Increment championship wins for the champion
-    if (t.participationType === "teams") {
+    if (tournament.participationType === "teams") {
       setTeams((prev) =>
         prev.map((tm) =>
-          tm.id === t.champion
+          tm.id === tournament.champion
             ? { ...tm, championshipWins: (tm.championshipWins ?? 0) + 1 }
             : tm,
         ),
@@ -112,7 +123,7 @@ function TournamentDetail() {
     } else {
       setCars((prev) =>
         prev.map((c) =>
-          c.id === t.champion
+          c.id === tournament.champion
             ? { ...c, championshipWins: (c.championshipWins ?? 0) + 1 }
             : c,
         ),
@@ -121,14 +132,14 @@ function TournamentDetail() {
 
     // Calculate losses to decrement for win/loss reset
     const toDecrement = new Map<string, { wins: number; losses: number }>();
-    t.matches.forEach((m) => {
+    tournament.matches.forEach((m) => {
       if (m.winnerId) {
         const dec = toDecrement.get(m.winnerId) || { wins: 0, losses: 0 };
         dec.wins += 1;
         toDecrement.set(m.winnerId, dec);
         
         let loserId: string | null = null;
-        if (t.participationType === "teams") {
+        if (tournament.participationType === "teams") {
           loserId = m.teamAId === m.winnerId ? m.teamBId ?? null : m.teamAId ?? null;
         } else {
           loserId = m.carAId === m.winnerId ? m.carBId ?? null : m.carAId ?? null;
@@ -145,7 +156,7 @@ function TournamentDetail() {
     // Reset the tournament matches and clear champion
     setTournaments((prev) =>
       prev.map((x) => {
-        if (x.id !== t.id) return x;
+        if (x.id !== tournament.id) return x;
         const isTeams = x.participationType === "teams";
         const matches = x.matches.map((m) => ({
           ...m,
@@ -157,7 +168,7 @@ function TournamentDetail() {
     );
 
     // Decrement wins and losses for all participants
-    if (t.participationType === "teams") {
+    if (tournament.participationType === "teams") {
       setTeams((prev) =>
         prev.map((tm) => {
           const dec = toDecrement.get(tm.id);
@@ -188,21 +199,23 @@ function TournamentDetail() {
 
   function pickWinner(matchId: string, winnerId: string) {
     // Find the match to get the loser ID
-    const match = t!.matches.find((m) => m.id === matchId);
+    const match = tournament.matches.find((m) => m.id === matchId);
     let loserId: string | null = null;
     
     if (match) {
-      if (t!.participationType === "teams") {
+      if (tournament.participationType === "teams") {
         loserId = match.teamAId === winnerId ? match.teamBId ?? null : match.teamAId ?? null;
       } else {
         loserId = match.carAId === winnerId ? match.carBId ?? null : match.carAId ?? null;
       }
     }
 
-    setTournaments((prev) => prev.map((x) => (x.id === t!.id ? applyWinner(x, matchId, winnerId) : x)));
+    setTournaments((prev) =>
+      prev.map((x) => (x.id === tournament.id ? applyWinner(x, matchId, winnerId) : x)),
+    );
     
     // Increment wins for the winner and losses for the loser
-    if (t!.participationType === "teams") {
+    if (tournament.participationType === "teams") {
       setTeams((prev) => prev.map((tm) => {
         if (tm.id === winnerId) return { ...tm, wins: (tm.wins ?? 0) + 1 };
         if (tm.id === loserId) return { ...tm, losses: (tm.losses ?? 0) + 1 };
@@ -220,14 +233,14 @@ function TournamentDetail() {
   function reset() {
     // Calculate losses and wins to decrement based on current matches
     const toDecrement = new Map<string, { wins: number; losses: number }>();
-    t!.matches.forEach((m) => {
+    tournament.matches.forEach((m) => {
       if (m.winnerId) {
         const dec = toDecrement.get(m.winnerId) || { wins: 0, losses: 0 };
         dec.wins += 1;
         toDecrement.set(m.winnerId, dec);
         
         let loserId: string | null = null;
-        if (t!.participationType === "teams") {
+        if (tournament.participationType === "teams") {
           loserId = m.teamAId === m.winnerId ? m.teamBId ?? null : m.teamAId ?? null;
         } else {
           loserId = m.carAId === m.winnerId ? m.carBId ?? null : m.carAId ?? null;
@@ -243,7 +256,7 @@ function TournamentDetail() {
 
     setTournaments((prev) =>
       prev.map((x) => {
-        if (x.id !== t!.id) return x;
+        if (x.id !== tournament.id) return x;
         const isTeams = x.participationType === "teams";
         const matches = x.matches.map((m) => {
           if (x.format === "round-robin") return { ...m, winnerId: null };
@@ -270,7 +283,7 @@ function TournamentDetail() {
     );
 
     // Decrement wins and losses for affected participants
-    if (t!.participationType === "teams") {
+    if (tournament.participationType === "teams") {
       setTeams((prev) =>
         prev.map((tm) => {
           const dec = toDecrement.get(tm.id);
@@ -304,57 +317,65 @@ function TournamentDetail() {
       </Link>
       <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t.name}</h1>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{tournament.name}</h1>
           <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            {t.format === "single"
+            {tournament.format === "single"
               ? "Single elimination"
-              : t.format === "double"
+              : tournament.format === "double"
                 ? "Double elimination"
-                : t.format === "round-robin"
+                : tournament.format === "round-robin"
                   ? "Round-robin"
-                  : t.format === "time-trial"
+                  : tournament.format === "time-trial"
                     ? "Time trial"
-                    : `Championship • ${t.qualifyingType === "round-robin" ? "Round-robin" : "Time trial"} → ${t.qualifyingFormat === "double" ? "Double" : "Single"} elim`}
+                    : `Championship • ${tournament.qualifyingType === "round-robin" ? "Round-robin" : "Time trial"} → ${tournament.qualifyingFormat === "double" ? "Double" : "Single"} elim`}
             {" • "}
-            {t.participationType === "teams" ? (t.teamIds?.length || 0) : (t.carIds?.length || 0)} {t.participationType === "teams" ? "teams" : "cars"}
+            {tournament.participationType === "teams" ? (tournament.teamIds?.length || 0) : (tournament.carIds?.length || 0)} {tournament.participationType === "teams" ? "teams" : "cars"}
           </p>
         </div>
-        {champ ? (
-          <div className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-elegant)]" style={{ background: "var(--gradient-primary)" }}>
-            <Trophy className="h-4 w-4" /> Champion: {champ.name}
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {certificatePlacements.length > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setCertificateOpen(true)}>
+              <Download className="mr-2 h-4 w-4" />
+              Certificates
+            </Button>
+          )}
+          {champ ? (
+            <div className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-elegant)]" style={{ background: "var(--gradient-primary)" }}>
+              <Trophy className="h-4 w-4" /> Champion: {champ.name}
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      {t.format === "round-robin" ? (
-        <RoundRobin t={t} cars={cars} teams={teams} onPick={pickWinner} />
-      ) : t.format === "time-trial" ? (
+      {tournament.format === "round-robin" ? (
+        <RoundRobin t={tournament} cars={cars} teams={teams} onPick={pickWinner} />
+      ) : tournament.format === "time-trial" ? (
         <TimeTrialView
-          t={t}
+          t={tournament}
           cars={cars}
           teams={teams}
           onChange={(updater) =>
-            setTournaments((prev) => prev.map((x) => (x.id === t!.id ? updater(x) : x)))
+            setTournaments((prev) => prev.map((x) => (x.id === tournament.id ? updater(x) : x)))
           }
         />
-      ) : t.format === "championship" ? (
+      ) : tournament.format === "championship" ? (
         <ChampionshipView
-          t={t}
+          t={tournament}
           cars={cars}
           teams={teams}
           carById={carById}
           teamById={teamById}
           onPick={pickWinner}
           onChange={(updater) =>
-            setTournaments((prev) => prev.map((x) => (x.id === t!.id ? updater(x) : x)))
+            setTournaments((prev) => prev.map((x) => (x.id === tournament.id ? updater(x) : x)))
           }
         />
       ) : (
-        <Bracket t={t} carById={carById} teamById={teamById} onPick={pickWinner} />
+        <Bracket t={tournament} carById={carById} teamById={teamById} onPick={pickWinner} />
       )}
 
       <div className="mt-10 flex justify-end gap-2">
-        {t.format !== "time-trial" && t.format !== "championship" && (
+        {tournament.format !== "time-trial" && tournament.format !== "championship" && (
           <Button variant="outline" size="sm" onClick={reset}>Reset results</Button>
         )}
         {allRoundRobinComplete && !champ && (
@@ -363,13 +384,22 @@ function TournamentDetail() {
             End Tournament
           </Button>
         )}
-        {t.persistent && champ && (
+        {tournament.persistent && champ && (
           <Button size="sm" onClick={resetForNextSeason} className="bg-amber-600 hover:bg-amber-700">
             <Trophy className="h-4 w-4 mr-2" />
             Reset for Next Season
           </Button>
         )}
       </div>
+
+      {certificatePlacements.length > 0 && (
+        <TournamentCertificateDialog
+          open={certificateOpen}
+          onOpenChange={setCertificateOpen}
+          tournament={tournament}
+          placements={certificatePlacements}
+        />
+      )}
     </main>
   );
 }
@@ -861,7 +891,7 @@ function Bracket({
 }
 
 function RoundRobin({ t, cars, teams, onPick }: { t: Tournament; cars: Car[]; teams: Team[]; onPick: (matchId: string, winnerId: string) => void }) {
-  const standings = standingsFor(t, cars);
+  const standings = standingsFor(t, cars, teams);
   const isTeams = t.participationType === "teams";
   const carById = (id?: string | null) => (id ? cars.find((c) => c.id === id) : undefined);
   const teamById = (id?: string | null) => (id ? teams.find((tm) => tm.id === id) : undefined);

@@ -63,6 +63,8 @@ const carSchema = z.object({
   notes: z.string().max(1000).optional().nullable(),
   createdAt: z.number().int().nonnegative(),
   wins: z.number().nonnegative().optional(),
+  losses: z.number().nonnegative().optional(),
+  championshipWins: z.number().nonnegative().optional(),
 });
 
 const matchSchema = z.object({
@@ -77,6 +79,13 @@ const matchSchema = z.object({
   winnerId: z.string().nullable().optional(),
   winnerType: z.enum(["car", "team"]).nullable().optional(),
   isGroup: z.boolean().optional(),
+});
+
+const previousSeasonSchema = z.object({
+  season: z.number().int().positive(),
+  champion: z.string().min(1),
+  championType: z.enum(["car", "team"]),
+  dateEnded: z.number().int().nonnegative(),
 });
 
 const tournamentSchema = z.object({
@@ -110,6 +119,8 @@ const tournamentSchema = z.object({
   seeds: z
     .array(z.object({ participantId: z.string().min(1), seed: z.number().int().positive() }))
     .optional(),
+  persistent: z.boolean().optional(),
+  previousSeasons: z.array(previousSeasonSchema).optional(),
 });
 
 const teamSchema = z.object({
@@ -117,9 +128,12 @@ const teamSchema = z.object({
   name: z.string().min(1, "missing name").max(80),
   color: z.string().min(1).max(32),
   carIds: z.array(z.string()),
+  sponsor: z.string().max(40).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
   createdAt: z.number().int().nonnegative(),
   wins: z.number().nonnegative().optional(),
+  losses: z.number().nonnegative().optional(),
+  championshipWins: z.number().nonnegative().optional(),
 });
 
 const manifestSchema = z.object({
@@ -270,7 +284,11 @@ export async function importBackupZip(
     if (missing.length > 0) {
       warnings.push(`teams[${idx}] "${r.data.name}": ${missing.length} member car id(s) not found`);
     }
-    validTeams.push({ ...r.data, notes: r.data.notes ?? undefined });
+    validTeams.push({
+      ...r.data,
+      sponsor: r.data.sponsor ?? undefined,
+      notes: r.data.notes ?? undefined,
+    });
   });
 
   if (issues.length > 0) throw new BackupValidationError(issues, warnings);
