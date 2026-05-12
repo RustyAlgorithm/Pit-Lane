@@ -26,6 +26,8 @@ export interface Car {
   notes?: string;
   createdAt: number;
   wins?: number;
+  losses?: number;
+  championshipWins?: number;
 }
 
 export interface Match {
@@ -65,6 +67,9 @@ export interface Tournament {
   qualifyingMatches?: Match[];
   qualifyingLocked?: boolean;
   seeds?: { participantId: string; seed: number }[];
+  // persistent tournaments
+  persistent?: boolean;
+  previousSeasons?: { season: number; champion: string; championType: "car" | "team"; dateEnded: number }[];
 }
 
 export interface Team {
@@ -76,4 +81,6 @@ export interface Team {
   notes?: string;
   createdAt: number;
   wins?: number;
+  losses?: number;
+  championshipWins?: number;
 }

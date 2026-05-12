@@ -1,13 +1,21 @@
-1. Expand Leaderboards
+1. Expand Leaderboards - done
     a. include Wins per car and per Team
 
 2. Add toggle for persistent tournaments
     a. Adds a new button when a tournament is finished to reset the tournament 
     b. this also means that leaderboards would need to be worked on more to allow for existing tournaments to be reset be the results saved to we can track number of championship wins etc.
-    
+
+2. Championship creation window need to be able to be scrollable
+2. Add championship history to export
+
+
 3. Dark mode.
 
-4. Real Car Mode.
-    not sure how this will work need to think
+4. Certificates and Podiums 
+    a. For fun to make it more exciting for kids.
 
 5. Tutorial Page.
+
+6. Bulk Car Entry, CSV import
+
+7. add DNF feature - no DNF auto defaults to opponent win, if both dnf run the race again - done

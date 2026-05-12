@@ -29,7 +29,8 @@ function Index() {
             Local • Offline-first
           </span>
           <h1 className="mt-4 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-            Build your diecast team. Race the bracket.
+            Build your diecast team.
+            <br /> Race the bracket.
           </h1>
           <p className="mt-4 text-base text-white/70 sm:text-lg">
             Catalog your cars, generate driver names, and run single elimination, double elimination, or round-robin tournaments — all on this device.
@@ -52,7 +53,15 @@ function Index() {
         <StatCard icon={<Trophy className="h-5 w-5" />} label="Tournaments" value={tournaments.length} />
         <StatCard icon={<Users className="h-5 w-5" />} label="Champions crowned" value={tournaments.filter((t) => t.champion).length} />
       </section>
-
+      <section className="mt-12 rounded-xl bg-secondary/50 p-6 text-center">
+        <h1 className="text-lg font-semibold ">BACKUP YOUR DATA!</h1>
+        <h3 className="text-md font-medium text-muted-foreground">
+          Pit Lane is designed to be a private experience, meaning we don’t use cloud accounts or store your data on our servers.
+        </h3>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Instead, everything you create—your cars, tournaments, and teams—is stored locally within your browser. Because this data lives on your device, we have provided a way to export and import a backup to ensure your progress is never lost. Use the Backup button in the navigation bar to export a ZIP file containing your data. It’s a good habit to save a fresh copy before closing your session or clearing your browser cache.
+        </p>
+      </section>
       <section className="mt-12 grid gap-6 md:grid-cols-2">
         <FeatureCard
           title="Garage"
@@ -65,6 +74,7 @@ function Index() {
           to="/tournaments"
         />
       </section>
+      
     </main>
   );
 }

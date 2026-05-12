@@ -2,12 +2,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Tournament, TimeEntry, Team } from "@/lib/types";
-import {
-  applyWinner,
-  standingsFor,
-  buildSeededBracket,
-  rankQualifiers,
-} from "@/lib/bracket";
+import { applyWinner, standingsFor, buildSeededBracket, rankQualifiers } from "@/lib/bracket";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -19,7 +14,9 @@ export const Route = createFileRoute("/tournaments/$id")({
   notFoundComponent: () => (
     <div className="mx-auto max-w-md px-4 py-20 text-center">
       <h1 className="text-2xl font-bold">Tournament not found</h1>
-      <Button asChild className="mt-4"><Link to="/tournaments">Back</Link></Button>
+      <Button asChild className="mt-4">
+        <Link to="/tournaments">Back</Link>
+      </Button>
     </div>
   ),
   errorComponent: ({ error, reset }) => {
@@ -28,7 +25,12 @@ export const Route = createFileRoute("/tournaments/$id")({
       <div className="mx-auto max-w-md px-4 py-20 text-center">
         <h1 className="text-xl font-semibold">Something went wrong</h1>
         <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
-        <Button className="mt-4" onClick={() => { router.invalidate(); reset(); }}>Retry</Button>
+        <Button 
+          className="mt-4"
+          onClick={() => { 
+            router.invalidate(); reset(); }}>
+          Retry
+        </Button>
       </div>
     );
   },
@@ -56,18 +58,189 @@ function TournamentDetail() {
   const teamById = (tid?: string | null) => (tid ? teams.find((tm) => tm.id === tid) : undefined);
   const champ = t.champion ? (t.championType === "team" ? teamById(t.champion) : carById(t.champion)) : null;
 
+  // Check if all round-robin matches are complete
+  const allRoundRobinComplete = t.format === "round-robin" && t.matches.every((m) => m.winnerId !== null);
+
+  function endRoundRobin() {
+    // Get standings to find the champion (first place)
+    const standings = standingsFor(t, cars);
+    if (standings.length === 0) return;
+    
+    const championStanding = standings[0];
+    
+    // Find the champion ID
+    let championId: string | null = null;
+    if (t.participationType === "teams") {
+      const teamIds = t.teamIds ?? [];
+      championId = teamIds.find((id) => teams.find((tm) => tm.id === id)?.name === championStanding.name) ?? null;
+    } else {
+      const carIds = t.carIds ?? [];
+      championId = carIds.find((id) => cars.find((c) => c.id === id)?.name === championStanding.name) ?? null;
+    }
+
+    if (championId) {
+      setTournaments((prev) =>
+        prev.map((x) =>
+          x.id === t.id
+            ? { ...x, champion: championId, championType: t.participationType === "teams" ? "team" : "car" }
+            : x,
+        ),
+      );
+      toast.success("Tournament ended! Champion crowned.");
+    }
+  }
+
+  function resetForNextSeason() {
+    if (!t.champion || !t.championType) return;
+    
+    // Archive the current champion
+    const season = (t.previousSeasons?.length ?? 0) + 1;
+    const newPreviousSeasons = [
+      ...(t.previousSeasons ?? []),
+      { season, champion: t.champion, championType: t.championType, dateEnded: Date.now() },
+    ];
+
+    // Increment championship wins for the champion
+    if (t.participationType === "teams") {
+      setTeams((prev) =>
+        prev.map((tm) =>
+          tm.id === t.champion
+            ? { ...tm, championshipWins: (tm.championshipWins ?? 0) + 1 }
+            : tm,
+        ),
+      );
+    } else {
+      setCars((prev) =>
+        prev.map((c) =>
+          c.id === t.champion
+            ? { ...c, championshipWins: (c.championshipWins ?? 0) + 1 }
+            : c,
+        ),
+      );
+    }
+
+    // Calculate losses to decrement for win/loss reset
+    const toDecrement = new Map<string, { wins: number; losses: number }>();
+    t.matches.forEach((m) => {
+      if (m.winnerId) {
+        const dec = toDecrement.get(m.winnerId) || { wins: 0, losses: 0 };
+        dec.wins += 1;
+        toDecrement.set(m.winnerId, dec);
+        
+        let loserId: string | null = null;
+        if (t.participationType === "teams") {
+          loserId = m.teamAId === m.winnerId ? m.teamBId ?? null : m.teamAId ?? null;
+        } else {
+          loserId = m.carAId === m.winnerId ? m.carBId ?? null : m.carAId ?? null;
+        }
+        
+        if (loserId) {
+          const loserDec = toDecrement.get(loserId) || { wins: 0, losses: 0 };
+          loserDec.losses += 1;
+          toDecrement.set(loserId, loserDec);
+        }
+      }
+    });
+
+    // Reset the tournament matches and clear champion
+    setTournaments((prev) =>
+      prev.map((x) => {
+        if (x.id !== t.id) return x;
+        const isTeams = x.participationType === "teams";
+        const matches = x.matches.map((m) => ({
+          ...m,
+          winnerId: null,
+          ...(isTeams ? { teamAId: m.teamAId, teamBId: m.teamBId } : { carAId: m.carAId, carBId: m.carBId }),
+        }));
+        return { ...x, champion: null, championType: null, matches, previousSeasons: newPreviousSeasons };
+      }),
+    );
+
+    // Decrement wins and losses for all participants
+    if (t.participationType === "teams") {
+      setTeams((prev) =>
+        prev.map((tm) => {
+          const dec = toDecrement.get(tm.id);
+          if (!dec) return tm;
+          return {
+            ...tm,
+            wins: Math.max(0, (tm.wins ?? 0) - dec.wins),
+            losses: Math.max(0, (tm.losses ?? 0) - dec.losses),
+          };
+        }),
+      );
+    } else {
+      setCars((prev) =>
+        prev.map((c) => {
+          const dec = toDecrement.get(c.id);
+          if (!dec) return c;
+          return {
+            ...c,
+            wins: Math.max(0, (c.wins ?? 0) - dec.wins),
+            losses: Math.max(0, (c.losses ?? 0) - dec.losses),
+          };
+        }),
+      );
+    }
+
+    toast.success("Tournament reset for next season!");
+  }
+
   function pickWinner(matchId: string, winnerId: string) {
+    // Find the match to get the loser ID
+    const match = t!.matches.find((m) => m.id === matchId);
+    let loserId: string | null = null;
+    
+    if (match) {
+      if (t!.participationType === "teams") {
+        loserId = match.teamAId === winnerId ? match.teamBId ?? null : match.teamAId ?? null;
+      } else {
+        loserId = match.carAId === winnerId ? match.carBId ?? null : match.carAId ?? null;
+      }
+    }
+
     setTournaments((prev) => prev.map((x) => (x.id === t!.id ? applyWinner(x, matchId, winnerId) : x)));
     
-    // Increment wins for the winner
+    // Increment wins for the winner and losses for the loser
     if (t!.participationType === "teams") {
-      setTeams((prev) => prev.map((tm) => (tm.id === winnerId ? { ...tm, wins: (tm.wins ?? 0) + 1 } : tm)));
+      setTeams((prev) => prev.map((tm) => {
+        if (tm.id === winnerId) return { ...tm, wins: (tm.wins ?? 0) + 1 };
+        if (tm.id === loserId) return { ...tm, losses: (tm.losses ?? 0) + 1 };
+        return tm;
+      }));
     } else {
-      setCars((prev) => prev.map((c) => (c.id === winnerId ? { ...c, wins: (c.wins ?? 0) + 1 } : c)));
+      setCars((prev) => prev.map((c) => {
+        if (c.id === winnerId) return { ...c, wins: (c.wins ?? 0) + 1 };
+        if (c.id === loserId) return { ...c, losses: (c.losses ?? 0) + 1 };
+        return c;
+      }));
     }
   }
 
   function reset() {
+    // Calculate losses and wins to decrement based on current matches
+    const toDecrement = new Map<string, { wins: number; losses: number }>();
+    t!.matches.forEach((m) => {
+      if (m.winnerId) {
+        const dec = toDecrement.get(m.winnerId) || { wins: 0, losses: 0 };
+        dec.wins += 1;
+        toDecrement.set(m.winnerId, dec);
+        
+        let loserId: string | null = null;
+        if (t!.participationType === "teams") {
+          loserId = m.teamAId === m.winnerId ? m.teamBId ?? null : m.teamAId ?? null;
+        } else {
+          loserId = m.carAId === m.winnerId ? m.carBId ?? null : m.carAId ?? null;
+        }
+        
+        if (loserId) {
+          const loserDec = toDecrement.get(loserId) || { wins: 0, losses: 0 };
+          loserDec.losses += 1;
+          toDecrement.set(loserId, loserDec);
+        }
+      }
+    });
+
     setTournaments((prev) =>
       prev.map((x) => {
         if (x.id !== t!.id) return x;
@@ -95,6 +268,33 @@ function TournamentDetail() {
         return { ...x, champion: null, championType: null, matches };
       }),
     );
+
+    // Decrement wins and losses for affected participants
+    if (t!.participationType === "teams") {
+      setTeams((prev) =>
+        prev.map((tm) => {
+          const dec = toDecrement.get(tm.id);
+          if (!dec) return tm;
+          return {
+            ...tm,
+            wins: Math.max(0, (tm.wins ?? 0) - dec.wins),
+            losses: Math.max(0, (tm.losses ?? 0) - dec.losses),
+          };
+        }),
+      );
+    } else {
+      setCars((prev) =>
+        prev.map((c) => {
+          const dec = toDecrement.get(c.id);
+          if (!dec) return c;
+          return {
+            ...c,
+            wins: Math.max(0, (c.wins ?? 0) - dec.wins),
+            losses: Math.max(0, (c.losses ?? 0) - dec.losses),
+          };
+        }),
+      );
+    }
   }
 
   return (
@@ -153,9 +353,21 @@ function TournamentDetail() {
         <Bracket t={t} carById={carById} teamById={teamById} onPick={pickWinner} />
       )}
 
-      <div className="mt-10 flex justify-end">
+      <div className="mt-10 flex justify-end gap-2">
         {t.format !== "time-trial" && t.format !== "championship" && (
           <Button variant="outline" size="sm" onClick={reset}>Reset results</Button>
+        )}
+        {allRoundRobinComplete && !champ && (
+          <Button size="sm" onClick={endRoundRobin}>
+            <Trophy className="h-4 w-4 mr-2" />
+            End Tournament
+          </Button>
+        )}
+        {t.persistent && champ && (
+          <Button size="sm" onClick={resetForNextSeason} className="bg-amber-600 hover:bg-amber-700">
+            <Trophy className="h-4 w-4 mr-2" />
+            Reset for Next Season
+          </Button>
         )}
       </div>
     </main>

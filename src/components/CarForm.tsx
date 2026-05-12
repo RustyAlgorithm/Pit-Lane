@@ -18,7 +18,16 @@ interface Props {
   onCancel: () => void;
 }
 
-const BRANDS = ["Hot Wheels", "Matchbox", "Greenlight", "Maisto", "Auto World", "Johnny Lightning", "Tarmac Works", "Other"];
+const BRANDS = [
+  "Hot Wheels",
+  "Matchbox",
+  "Greenlight",
+  "Maisto",
+  "Auto World",
+  "Johnny Lightning",
+  "Tarmac Works",
+  "Other",
+];
 
 export function CarForm({ initial, onSave, onCancel }: Props) {
   const [carId] = useState(() => initial?.id ?? uid());
@@ -54,7 +63,7 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
 
     if (!trimmedName) {
       return toast.error("Car name required");
-}
+    }
     onSave({
       id: carId,
       name: trimmedName.slice(0, 60),
@@ -81,7 +90,10 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
                 <div className="absolute right-1 top-1 flex gap-1">
                   <button
                     type="button"
-                    onClick={() => { setCropSrc(photo); setCropOpen(true); }}
+                    onClick={() => {
+                      setCropSrc(photo);
+                      setCropOpen(true);
+                    }}
                     className="grid h-6 w-6 place-items-center rounded-full bg-background/90 shadow"
                     title="Re-crop"
                   >
@@ -131,13 +143,30 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
         <div className="grid gap-3">
           <div>
             <Label htmlFor="name">Car name</Label>
-            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Crimson Reaper" maxLength={60} />
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Crimson Reaper"
+              maxLength={60}
+            />
           </div>
           <div>
             <Label htmlFor="driver">Driver</Label>
             <div className="flex gap-2">
-              <Input id="driver" value={driver} onChange={(e) => setDriver(e.target.value)} placeholder="Driver name" maxLength={60} />
-              <Button type="button" variant="outline" onClick={() => setDriver(generateDriverName())} title="Generate name">
+              <Input
+                id="driver"
+                value={driver}
+                onChange={(e) => setDriver(e.target.value)}
+                placeholder="Driver name"
+                maxLength={60}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDriver(generateDriverName())}
+                title="Generate name"
+              >
                 <Sparkles className="h-4 w-4" />
               </Button>
             </div>
@@ -148,11 +177,23 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="make">Make</Label>
-          <Input id="make" value={make} onChange={(e) => setMake(e.target.value)} placeholder="Ford" maxLength={40} />
+          <Input
+            id="make"
+            value={make}
+            onChange={(e) => setMake(e.target.value)}
+            placeholder="Ford"
+            maxLength={40}
+          />
         </div>
         <div>
           <Label htmlFor="model">Model</Label>
-          <Input id="model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Mustang" maxLength={40} />
+          <Input
+            id="model"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="Mustang"
+            maxLength={40}
+          />
         </div>
         <div>
           <Label htmlFor="weight">Weight (g)</Label>
@@ -174,14 +215,23 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
             onChange={(e) => setBrand(e.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
-            {BRANDS.map((b) => <option key={b}>{b}</option>)}
+            {BRANDS.map((b) => (
+              <option key={b}>{b}</option>
+            ))}
           </select>
         </div>
       </div>
 
       <div>
         <Label htmlFor="notes">Notes</Label>
-        <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={300} rows={2} placeholder="Custom paint, mods, history..." />
+        <Textarea
+          id="notes"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          maxLength={300}
+          rows={2}
+          placeholder="Custom paint, mods, history..."
+        />
       </div>
 
       <div>
@@ -190,13 +240,21 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
         <Button type="submit">{initial ? "Save" : "Add car"}</Button>
       </div>
       <ImageCropDialog
         src={cropSrc}
         open={cropOpen}
-        onOpenChange={(o) => { setCropOpen(o); if (!o) { setCropSrc(null); if (fileRef.current) fileRef.current.value = ""; } }}
+        onOpenChange={(o) => {
+          setCropOpen(o);
+          if (!o) {
+            setCropSrc(null);
+            if (fileRef.current) fileRef.current.value = "";
+          }
+        }}
         onCropped={(url) => setPhoto(url)}
         aspect={1}
       />

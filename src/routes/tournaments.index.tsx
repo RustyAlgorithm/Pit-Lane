@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Team, Tournament, BracketFormat } from "@/lib/types";
 import { buildMatches, buildQualifyingMatches, nextPow2Down } from "@/lib/bracket";
@@ -44,6 +45,7 @@ function TournamentsPage() {
   const [qualifyingType, setQualifyingType] = useState<"time-trial" | "round-robin">("time-trial");
   const [qualifyingFormat, setQualifyingFormat] = useState<"single" | "double">("single");
   const [advanceCountInput, setAdvanceCountInput] = useState<string>("4");
+  const [persistent, setPersistent] = useState(false);
   const navigate = useNavigate();
 
   function toggle(id: string) {
@@ -94,6 +96,8 @@ function TournamentsPage() {
       matches: buildMatches(format, picked, participationType),
       createdAt: Date.now(),
       champion: null,
+      persistent,
+      previousSeasons: [],
       ...(format === "time-trial"
         ? { trackLength: trackLengthNum, trackUnit, times: [] }
         : {}),
@@ -323,6 +327,18 @@ function TournamentsPage() {
                     )}
                   </>
                 )}
+              </div>
+
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                <Checkbox
+                  id="persistent"
+                  checked={persistent}
+                  onCheckedChange={(checked) => setPersistent(checked === true)}
+                />
+                <Label htmlFor="persistent" className="cursor-pointer text-sm font-medium">
+                  Persistent tournament
+                  <p className="text-xs text-muted-foreground font-normal mt-1">Reset after each season while preserving champion history</p>
+                </Label>
               </div>
 
               <div className="flex justify-end gap-2">
