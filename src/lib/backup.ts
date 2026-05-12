@@ -82,7 +82,7 @@ const matchSchema = z.object({
 const tournamentSchema = z.object({
   id: z.string().min(1, "missing id"),
   name: z.string().min(1, "missing name").max(120),
-  format: z.enum(["single", "double", "round-robin", "time-trial"]),
+  format: z.enum(["single", "double", "round-robin", "time-trial", "championship"]),
   participationType: z.enum(["cars", "teams"]),
   carIds: z.array(z.string()).optional(),
   teamIds: z.array(z.string()).optional(),
@@ -101,6 +101,14 @@ const tournamentSchema = z.object({
         recordedAt: z.number().int().nonnegative(),
       }),
     )
+    .optional(),
+  qualifyingType: z.enum(["time-trial", "round-robin"]).optional(),
+  qualifyingFormat: z.enum(["single", "double"]).optional(),
+  advanceCount: z.number().int().min(2).max(256).optional(),
+  qualifyingMatches: z.array(matchSchema).optional(),
+  qualifyingLocked: z.boolean().optional(),
+  seeds: z
+    .array(z.object({ participantId: z.string().min(1), seed: z.number().int().positive() }))
     .optional(),
 });
 
@@ -234,7 +242,7 @@ export async function importBackupZip(
     }
     if (matchDup) return;
 
-    const missingRoster = r.data.carIds.filter((id) => !carIds.has(id));
+    const missingRoster = (r.data.carIds ?? []).filter((id) => !carIds.has(id));
     if (missingRoster.length > 0) {
       warnings.push(
         `tournaments[${idx}] "${r.data.name}": ${missingRoster.length} roster car id(s) not found in cars`,
