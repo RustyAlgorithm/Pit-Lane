@@ -2,7 +2,13 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Tournament, TimeEntry, Team } from "@/lib/types";
-import { applyWinner, standingsFor } from "@/lib/bracket";
+import {
+  applyWinner,
+  standingsFor,
+  buildSeededBracket,
+  rankQualifiers,
+} from "@/lib/bracket";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -52,7 +58,7 @@ function TournamentDetail() {
     setTournaments((prev) => prev.map((x) => (x.id === t!.id ? applyWinner(x, matchId, winnerId) : x)));
     
     // Increment wins for the winner
-    if (t.participationType === "teams") {
+    if (t!.participationType === "teams") {
       setTeams((prev) => prev.map((tm) => (tm.id === winnerId ? { ...tm, wins: (tm.wins ?? 0) + 1 } : tm)));
     } else {
       setCars((prev) => prev.map((c) => (c.id === winnerId ? { ...c, wins: (c.wins ?? 0) + 1 } : c)));
@@ -98,7 +104,17 @@ function TournamentDetail() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t.name}</h1>
           <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            {t.format === "single" ? "Single elimination" : t.format === "double" ? "Double elimination" : "Round-robin"} • {t.participationType === "teams" ? (t.teamIds?.length || 0) : (t.carIds?.length || 0)} {t.participationType === "teams" ? "teams" : "cars"}
+            {t.format === "single"
+              ? "Single elimination"
+              : t.format === "double"
+                ? "Double elimination"
+                : t.format === "round-robin"
+                  ? "Round-robin"
+                  : t.format === "time-trial"
+                    ? "Time trial"
+                    : `Championship • ${t.qualifyingType === "round-robin" ? "Round-robin" : "Time trial"} → ${t.qualifyingFormat === "double" ? "Double" : "Single"} elim`}
+            {" • "}
+            {t.participationType === "teams" ? (t.teamIds?.length || 0) : (t.carIds?.length || 0)} {t.participationType === "teams" ? "teams" : "cars"}
           </p>
         </div>
         {champ ? (
@@ -119,12 +135,24 @@ function TournamentDetail() {
             setTournaments((prev) => prev.map((x) => (x.id === t!.id ? updater(x) : x)))
           }
         />
+      ) : t.format === "championship" ? (
+        <ChampionshipView
+          t={t}
+          cars={cars}
+          teams={teams}
+          carById={carById}
+          teamById={teamById}
+          onPick={pickWinner}
+          onChange={(updater) =>
+            setTournaments((prev) => prev.map((x) => (x.id === t!.id ? updater(x) : x)))
+          }
+        />
       ) : (
         <Bracket t={t} carById={carById} teamById={teamById} onPick={pickWinner} />
       )}
 
       <div className="mt-10 flex justify-end">
-        {t.format !== "time-trial" && (
+        {t.format !== "time-trial" && t.format !== "championship" && (
           <Button variant="outline" size="sm" onClick={reset}>Reset results</Button>
         )}
       </div>
@@ -306,6 +334,172 @@ function TimeTrialView({
           ))}
         </Card>
       </div>
+    </div>
+  );
+}
+
+function ChampionshipView({
+  t,
+  cars,
+  teams,
+  carById,
+  teamById,
+  onPick,
+  onChange,
+}: {
+  t: Tournament;
+  cars: Car[];
+  teams: Team[];
+  carById: (id?: string | null) => Car | undefined;
+  teamById: (id?: string | null) => Team | undefined;
+  onPick: (matchId: string, winnerId: string) => void;
+  onChange: (updater: (prev: Tournament) => Tournament) => void;
+}) {
+  const isTeams = t.participationType === "teams";
+  const locked = !!t.qualifyingLocked;
+  const advance = t.advanceCount ?? 0;
+
+  function lockAndSeed() {
+    const ranked = rankQualifiers(t, cars);
+    if (ranked.length < 2) {
+      toast.error("Not enough qualifiers to seed a bracket.");
+      return;
+    }
+    const bracketFormat = t.qualifyingFormat ?? "single";
+    const top = ranked.slice(0, advance);
+    const matches = buildSeededBracket(bracketFormat, top, isTeams);
+    if (matches.length === 0) {
+      toast.error("Could not build a bracket from these qualifiers.");
+      return;
+    }
+    const seeds = top.map((id, i) => ({ participantId: id, seed: i + 1 }));
+    onChange((prev) => ({
+      ...prev,
+      qualifyingLocked: true,
+      seeds,
+      matches,
+      champion: null,
+      championType: null,
+    }));
+    toast.success("Bracket seeded");
+  }
+
+  function unlock() {
+    if (!confirm("Unlock qualifying and clear the bracket?")) return;
+    onChange((prev) => ({
+      ...prev,
+      qualifyingLocked: false,
+      seeds: undefined,
+      matches: [],
+      champion: null,
+      championType: null,
+    }));
+  }
+
+  // Qualifying section ------------------------------------------------------
+  function QualifyingTimeTrial() {
+    return (
+      <TimeTrialView
+        t={t}
+        cars={cars}
+        teams={teams}
+        onChange={(u) => onChange(u)}
+      />
+    );
+  }
+
+  function QualifyingRoundRobin() {
+    const carByIdLocal = (id?: string | null) => (id ? cars.find((c) => c.id === id) : undefined);
+    const teamByIdLocal = (id?: string | null) => (id ? teams.find((tm) => tm.id === id) : undefined);
+    function pickQualifying(matchId: string, winnerId: string) {
+      onChange((prev) => ({
+        ...prev,
+        qualifyingMatches: (prev.qualifyingMatches ?? []).map((m) =>
+          m.id === matchId ? { ...m, winnerId } : m,
+        ),
+      }));
+    }
+    const qms = t.qualifyingMatches ?? [];
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        {qms.map((m, i) => (
+          <MatchCell
+            key={m.id}
+            label={`Qualifier ${i + 1}`}
+            carA={isTeams ? undefined : carByIdLocal(m.carAId)}
+            carB={isTeams ? undefined : carByIdLocal(m.carBId)}
+            teamA={isTeams ? teamByIdLocal(m.teamAId) : undefined}
+            teamB={isTeams ? teamByIdLocal(m.teamBId) : undefined}
+            winnerId={m.winnerId}
+            onPick={(id) => pickQualifying(m.id, id)}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // Live preview of seeding --------------------------------------------------
+  const ranked = rankQualifiers(t, cars);
+  const previewTop = ranked.slice(0, advance);
+  const nameOf = (id: string) => (isTeams ? teamById(id)?.name : carById(id)?.name) ?? "—";
+
+  return (
+    <div className="mt-8 space-y-10">
+      <section>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wider">
+            Qualifying — {t.qualifyingType === "round-robin" ? "Round-robin" : "Time trial"}
+            {locked ? " (locked)" : ""}
+          </h2>
+          {!locked ? (
+            <Button size="sm" onClick={lockAndSeed}>
+              Lock qualifying & seed bracket
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" onClick={unlock}>
+              Unlock qualifying
+            </Button>
+          )}
+        </div>
+        <div className={locked ? "pointer-events-none opacity-70" : ""}>
+          {t.qualifyingType === "round-robin" ? <QualifyingRoundRobin /> : <QualifyingTimeTrial />}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">
+          Championship bracket {locked ? `(top ${advance})` : "— preview"}
+        </h2>
+        {!locked ? (
+          <Card className="p-4 shadow-[var(--shadow-card)]">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Lock qualifying to build the bracket. Top {advance} will be seeded 1 v {advance}, 2 v{" "}
+              {advance - 1}, …
+            </p>
+            <div className="grid gap-1 text-sm">
+              {previewTop.length === 0 ? (
+                <span className="text-muted-foreground">No qualifying results yet.</span>
+              ) : (
+                previewTop.map((id, i) => (
+                  <div key={id} className="flex items-center gap-3">
+                    <span className="w-6 text-xs font-semibold tabular-nums text-muted-foreground">
+                      #{i + 1}
+                    </span>
+                    <span className="truncate font-medium">{nameOf(id)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+        ) : (
+          <Bracket
+            t={{ ...t, format: t.qualifyingFormat ?? "single" }}
+            carById={carById}
+            teamById={teamById}
+            onPick={onPick}
+          />
+        )}
+      </section>
     </div>
   );
 }

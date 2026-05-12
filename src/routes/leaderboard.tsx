@@ -31,7 +31,10 @@ function LeaderboardPage() {
   const groups = useMemo(() => {
     const map = new Map<string, { length: number; unit: TrackUnit; rows: Map<string, BoardRow> }>();
     tournaments.forEach((t) => {
-      if (t.format !== "time-trial" || !t.trackLength || !t.trackUnit) return;
+      const isTimeTrial =
+        t.format === "time-trial" ||
+        (t.format === "championship" && t.qualifyingType === "time-trial");
+      if (!isTimeTrial || !t.trackLength || !t.trackUnit) return;
       const key = `${t.trackLength}-${t.trackUnit}`;
       let g = map.get(key);
       if (!g) {

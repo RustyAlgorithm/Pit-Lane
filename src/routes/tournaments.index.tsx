@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Team, Tournament, BracketFormat } from "@/lib/types";
-import { buildMatches } from "@/lib/bracket";
+import { buildMatches, buildQualifyingMatches, nextPow2Down } from "@/lib/bracket";
 import { Plus, Trophy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CarCard } from "@/components/CarCard";
@@ -27,6 +27,7 @@ const FORMAT_LABEL: Record<BracketFormat, string> = {
   double: "Double elimination",
   "round-robin": "Round-robin",
   "time-trial": "Time trial",
+  championship: "Championship",
 };
 
 function TournamentsPage() {
@@ -40,6 +41,9 @@ function TournamentsPage() {
   const [picked, setPicked] = useState<string[]>([]);
   const [trackLength, setTrackLength] = useState<string>("200");
   const [trackUnit, setTrackUnit] = useState<"cm" | "m" | "ft">("cm");
+  const [qualifyingType, setQualifyingType] = useState<"time-trial" | "round-robin">("time-trial");
+  const [qualifyingFormat, setQualifyingFormat] = useState<"single" | "double">("single");
+  const [advanceCountInput, setAdvanceCountInput] = useState<string>("4");
   const navigate = useNavigate();
 
   function toggle(id: string) {
@@ -52,6 +56,16 @@ function TournamentsPage() {
     if (format === "time-trial") minParticipants = 1;
     if (format === "double") minParticipants = 3;
     if (format === "round-robin") minParticipants = 3;
+    let advancePow2 = 0;
+    if (format === "championship") {
+      const requested = Number(advanceCountInput);
+      if (!Number.isFinite(requested) || requested < 2)
+        return toast.error("Cutoff must be at least 2");
+      advancePow2 = nextPow2Down(Math.min(requested, picked.length || requested));
+      if (advancePow2 < 2)
+        return toast.error(`Need at least 2 ${participationType === "cars" ? "cars" : "teams"} in the bracket`);
+      minParticipants = Math.max(advancePow2, qualifyingFormat === "double" ? 3 : 2);
+    }
     if (picked.length < minParticipants) {
       if (format === "time-trial") {
         return toast.error(`Pick at least 1 ${participationType === "cars" ? "car" : "team"}`);
@@ -59,12 +73,14 @@ function TournamentsPage() {
         return toast.error(`Pick at least 3 ${participationType === "cars" ? "cars" : "teams"} for double elimination`);
       } else if (format === "round-robin") {
         return toast.error(`Pick at least 3 ${participationType === "cars" ? "cars" : "teams"} for round-robin`);
+      } else if (format === "championship") {
+        return toast.error(`Pick at least ${minParticipants} ${participationType === "cars" ? "cars" : "teams"}`);
       } else {
         return toast.error(`Pick at least 2 ${participationType === "cars" ? "cars" : "teams"}`);
       }
     }
     let trackLengthNum: number | undefined;
-    if (format === "time-trial") {
+    if (format === "time-trial" || (format === "championship" && qualifyingType === "time-trial")) {
       trackLengthNum = Number(trackLength);
       if (!Number.isFinite(trackLengthNum) || trackLengthNum <= 0)
         return toast.error("Enter a valid track length");
@@ -80,6 +96,18 @@ function TournamentsPage() {
       champion: null,
       ...(format === "time-trial"
         ? { trackLength: trackLengthNum, trackUnit, times: [] }
+        : {}),
+      ...(format === "championship"
+        ? {
+            qualifyingType,
+            qualifyingFormat,
+            advanceCount: advancePow2,
+            qualifyingMatches: buildQualifyingMatches(qualifyingType, picked, participationType),
+            qualifyingLocked: false,
+            ...(qualifyingType === "time-trial"
+              ? { trackLength: trackLengthNum, trackUnit, times: [] }
+              : {}),
+          }
         : {}),
     };
     setTournaments((prev) => [t, ...prev]);
@@ -130,11 +158,13 @@ function TournamentsPage() {
                     <option value="double">Double elimination</option>
                     <option value="round-robin">Round-robin</option>
                     <option value="time-trial">Time trial</option>
+                    <option value="championship">Championship (qualifying + bracket)</option>
                   </select>
                 </div>
               </div>
 
-              {format === "time-trial" && (
+              {(format === "time-trial" ||
+                (format === "championship" && qualifyingType === "time-trial")) && (
                 <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
                   <div>
                     <Label htmlFor="tlen">Track length</Label>
@@ -160,6 +190,49 @@ function TournamentsPage() {
                       <option value="m">m</option>
                       <option value="ft">ft</option>
                     </select>
+                  </div>
+                </div>
+              )}
+
+              {format === "championship" && (
+                <div className="grid gap-3 rounded-lg border border-border bg-secondary/30 p-4 sm:grid-cols-3">
+                  <div>
+                    <Label htmlFor="qtype">Qualifying</Label>
+                    <select
+                      id="qtype"
+                      value={qualifyingType}
+                      onChange={(e) => setQualifyingType(e.target.value as "time-trial" | "round-robin")}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="time-trial">Time trial</option>
+                      <option value="round-robin">Round-robin</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="qbracket">Bracket</Label>
+                    <select
+                      id="qbracket"
+                      value={qualifyingFormat}
+                      onChange={(e) => setQualifyingFormat(e.target.value as "single" | "double")}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="single">Single elimination</option>
+                      <option value="double">Double elimination</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="advn">Advance (top N)</Label>
+                    <Input
+                      id="advn"
+                      type="number"
+                      min={2}
+                      step={1}
+                      value={advanceCountInput}
+                      onChange={(e) => setAdvanceCountInput(e.target.value)}
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Rounded down to {nextPow2Down(Math.max(2, Number(advanceCountInput) || 0))} (power of 2).
+                    </p>
                   </div>
                 </div>
               )}
