@@ -2,7 +2,13 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Tournament, TimeEntry, Team } from "@/lib/types";
-import { applyWinner, standingsFor } from "@/lib/bracket";
+import {
+  applyWinner,
+  standingsFor,
+  buildSeededBracket,
+  rankQualifiers,
+} from "@/lib/bracket";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -52,7 +58,7 @@ function TournamentDetail() {
     setTournaments((prev) => prev.map((x) => (x.id === t!.id ? applyWinner(x, matchId, winnerId) : x)));
     
     // Increment wins for the winner
-    if (t.participationType === "teams") {
+    if (t!.participationType === "teams") {
       setTeams((prev) => prev.map((tm) => (tm.id === winnerId ? { ...tm, wins: (tm.wins ?? 0) + 1 } : tm)));
     } else {
       setCars((prev) => prev.map((c) => (c.id === winnerId ? { ...c, wins: (c.wins ?? 0) + 1 } : c)));
@@ -98,7 +104,17 @@ function TournamentDetail() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t.name}</h1>
           <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            {t.format === "single" ? "Single elimination" : t.format === "double" ? "Double elimination" : "Round-robin"} • {t.participationType === "teams" ? (t.teamIds?.length || 0) : (t.carIds?.length || 0)} {t.participationType === "teams" ? "teams" : "cars"}
+            {t.format === "single"
+              ? "Single elimination"
+              : t.format === "double"
+                ? "Double elimination"
+                : t.format === "round-robin"
+                  ? "Round-robin"
+                  : t.format === "time-trial"
+                    ? "Time trial"
+                    : `Championship • ${t.qualifyingType === "round-robin" ? "Round-robin" : "Time trial"} → ${t.qualifyingFormat === "double" ? "Double" : "Single"} elim`}
+            {" • "}
+            {t.participationType === "teams" ? (t.teamIds?.length || 0) : (t.carIds?.length || 0)} {t.participationType === "teams" ? "teams" : "cars"}
           </p>
         </div>
         {champ ? (
@@ -119,12 +135,24 @@ function TournamentDetail() {
             setTournaments((prev) => prev.map((x) => (x.id === t!.id ? updater(x) : x)))
           }
         />
+      ) : t.format === "championship" ? (
+        <ChampionshipView
+          t={t}
+          cars={cars}
+          teams={teams}
+          carById={carById}
+          teamById={teamById}
+          onPick={pickWinner}
+          onChange={(updater) =>
+            setTournaments((prev) => prev.map((x) => (x.id === t!.id ? updater(x) : x)))
+          }
+        />
       ) : (
         <Bracket t={t} carById={carById} teamById={teamById} onPick={pickWinner} />
       )}
 
       <div className="mt-10 flex justify-end">
-        {t.format !== "time-trial" && (
+        {t.format !== "time-trial" && t.format !== "championship" && (
           <Button variant="outline" size="sm" onClick={reset}>Reset results</Button>
         )}
       </div>
