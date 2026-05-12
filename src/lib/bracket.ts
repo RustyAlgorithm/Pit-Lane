@@ -137,11 +137,15 @@ export function applyWinner(t: Tournament, matchId: string, winnerId: string): T
   const bId = isTeams ? m.teamBId : m.carBId;
   const loserId = aId === winnerId ? bId : aId;
 
-  if (t.format === "round-robin") {
+  // Championship's bracket stage behaves like its qualifyingFormat (single|double).
+  const effFormat: BracketFormat =
+    t.format === "championship" ? (t.qualifyingFormat ?? "single") : t.format;
+
+  if (effFormat === "round-robin") {
     return { ...t, matches };
   }
 
-  if (t.format === "single") {
+  if (effFormat === "single") {
     // find next round same bracket: slot = floor(slot/2), side = slot%2
     const next = matches.find(
       (n) => n.round === m.round + 1 && n.slot === Math.floor(m.slot / 2),
