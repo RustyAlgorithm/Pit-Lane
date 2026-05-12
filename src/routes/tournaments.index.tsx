@@ -158,11 +158,13 @@ function TournamentsPage() {
                     <option value="double">Double elimination</option>
                     <option value="round-robin">Round-robin</option>
                     <option value="time-trial">Time trial</option>
+                    <option value="championship">Championship (qualifying + bracket)</option>
                   </select>
                 </div>
               </div>
 
-              {format === "time-trial" && (
+              {(format === "time-trial" ||
+                (format === "championship" && qualifyingType === "time-trial")) && (
                 <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
                   <div>
                     <Label htmlFor="tlen">Track length</Label>
@@ -188,6 +190,49 @@ function TournamentsPage() {
                       <option value="m">m</option>
                       <option value="ft">ft</option>
                     </select>
+                  </div>
+                </div>
+              )}
+
+              {format === "championship" && (
+                <div className="grid gap-3 rounded-lg border border-border bg-secondary/30 p-4 sm:grid-cols-3">
+                  <div>
+                    <Label htmlFor="qtype">Qualifying</Label>
+                    <select
+                      id="qtype"
+                      value={qualifyingType}
+                      onChange={(e) => setQualifyingType(e.target.value as "time-trial" | "round-robin")}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="time-trial">Time trial</option>
+                      <option value="round-robin">Round-robin</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="qbracket">Bracket</Label>
+                    <select
+                      id="qbracket"
+                      value={qualifyingFormat}
+                      onChange={(e) => setQualifyingFormat(e.target.value as "single" | "double")}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="single">Single elimination</option>
+                      <option value="double">Double elimination</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="advn">Advance (top N)</Label>
+                    <Input
+                      id="advn"
+                      type="number"
+                      min={2}
+                      step={1}
+                      value={advanceCountInput}
+                      onChange={(e) => setAdvanceCountInput(e.target.value)}
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Rounded down to {nextPow2Down(Math.max(2, Number(advanceCountInput) || 0))} (power of 2).
+                    </p>
                   </div>
                 </div>
               )}
