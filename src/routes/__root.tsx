@@ -10,7 +10,9 @@ import {
 
 import appCss from "../styles.css?url";
 import { SiteHeader } from "@/components/SiteHeader";
+import { ThemeProvider, useTheme } from "@/components/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
+import { getThemeInitScript } from "@/lib/theme";
 
 function NotFoundComponent() {
   return (
@@ -98,8 +100,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: getThemeInitScript() }} />
         <HeadContent />
       </head>
       <body>
@@ -115,11 +118,23 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <AppFrame />
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+}
+
+function AppFrame() {
+  const { resolvedTheme } = useTheme();
+
+  return (
+    <>
       <div className="min-h-screen bg-background text-foreground">
         <SiteHeader />
         <Outlet />
       </div>
-      <Toaster richColors position="top-center" />
-    </QueryClientProvider>
+      <Toaster richColors position="top-center" theme={resolvedTheme} />
+    </>
   );
 }

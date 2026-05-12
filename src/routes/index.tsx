@@ -24,7 +24,7 @@ function Index() {
     <main className="mx-auto max-w-6xl px-4 py-10 sm:py-16">
       <section className="relative overflow-hidden rounded-3xl px-6 py-12 sm:px-12 sm:py-16" style={{ background: "var(--gradient-hero)" }}>
         <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "repeating-linear-gradient(135deg, white 0 2px, transparent 2px 14px)" }} />
-        <div className="relative max-w-2xl text-primary-foreground">
+        <div className="relative max-w-2xl text-white">
           <span className="inline-flex items-center rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/80">
             Local • Offline-first
           </span>
