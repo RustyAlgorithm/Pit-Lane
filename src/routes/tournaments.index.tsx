@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Team, Tournament, BracketFormat } from "@/lib/types";
-import { buildMatches } from "@/lib/bracket";
+import { buildMatches, buildQualifyingMatches, nextPow2Down } from "@/lib/bracket";
 import { Plus, Trophy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CarCard } from "@/components/CarCard";
@@ -27,6 +27,7 @@ const FORMAT_LABEL: Record<BracketFormat, string> = {
   double: "Double elimination",
   "round-robin": "Round-robin",
   "time-trial": "Time trial",
+  championship: "Championship",
 };
 
 function TournamentsPage() {
@@ -40,6 +41,9 @@ function TournamentsPage() {
   const [picked, setPicked] = useState<string[]>([]);
   const [trackLength, setTrackLength] = useState<string>("200");
   const [trackUnit, setTrackUnit] = useState<"cm" | "m" | "ft">("cm");
+  const [qualifyingType, setQualifyingType] = useState<"time-trial" | "round-robin">("time-trial");
+  const [qualifyingFormat, setQualifyingFormat] = useState<"single" | "double">("single");
+  const [advanceCountInput, setAdvanceCountInput] = useState<string>("4");
   const navigate = useNavigate();
 
   function toggle(id: string) {
@@ -52,6 +56,16 @@ function TournamentsPage() {
     if (format === "time-trial") minParticipants = 1;
     if (format === "double") minParticipants = 3;
     if (format === "round-robin") minParticipants = 3;
+    let advancePow2 = 0;
+    if (format === "championship") {
+      const requested = Number(advanceCountInput);
+      if (!Number.isFinite(requested) || requested < 2)
+        return toast.error("Cutoff must be at least 2");
+      advancePow2 = nextPow2Down(Math.min(requested, picked.length || requested));
+      if (advancePow2 < 2)
+        return toast.error(`Need at least 2 ${participationType === "cars" ? "cars" : "teams"} in the bracket`);
+      minParticipants = Math.max(advancePow2, qualifyingFormat === "double" ? 3 : 2);
+    }
     if (picked.length < minParticipants) {
       if (format === "time-trial") {
         return toast.error(`Pick at least 1 ${participationType === "cars" ? "car" : "team"}`);
@@ -59,12 +73,14 @@ function TournamentsPage() {
         return toast.error(`Pick at least 3 ${participationType === "cars" ? "cars" : "teams"} for double elimination`);
       } else if (format === "round-robin") {
         return toast.error(`Pick at least 3 ${participationType === "cars" ? "cars" : "teams"} for round-robin`);
+      } else if (format === "championship") {
+        return toast.error(`Pick at least ${minParticipants} ${participationType === "cars" ? "cars" : "teams"}`);
       } else {
         return toast.error(`Pick at least 2 ${participationType === "cars" ? "cars" : "teams"}`);
       }
     }
     let trackLengthNum: number | undefined;
-    if (format === "time-trial") {
+    if (format === "time-trial" || (format === "championship" && qualifyingType === "time-trial")) {
       trackLengthNum = Number(trackLength);
       if (!Number.isFinite(trackLengthNum) || trackLengthNum <= 0)
         return toast.error("Enter a valid track length");
@@ -80,6 +96,18 @@ function TournamentsPage() {
       champion: null,
       ...(format === "time-trial"
         ? { trackLength: trackLengthNum, trackUnit, times: [] }
+        : {}),
+      ...(format === "championship"
+        ? {
+            qualifyingType,
+            qualifyingFormat,
+            advanceCount: advancePow2,
+            qualifyingMatches: buildQualifyingMatches(qualifyingType, picked, participationType),
+            qualifyingLocked: false,
+            ...(qualifyingType === "time-trial"
+              ? { trackLength: trackLengthNum, trackUnit, times: [] }
+              : {}),
+          }
         : {}),
     };
     setTournaments((prev) => [t, ...prev]);
