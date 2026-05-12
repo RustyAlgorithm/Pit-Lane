@@ -254,3 +254,147 @@ export function standingsFor(t: Tournament, cars: Car[]) {
   });
   return [...map.values()].sort((a, b) => b.w - a.w || a.l - b.l);
 }
+
+/** Standard tournament bracket order for N seeds (N power of 2). e.g. 8 -> [1,8,4,5,2,7,3,6] */
+export function bracketOrder(n: number): number[] {
+  if (n <= 1) return [1];
+  if (n === 2) return [1, 2];
+  const prev = bracketOrder(n / 2);
+  const out: number[] = [];
+  for (const p of prev) out.push(p, n + 1 - p);
+  return out;
+}
+
+export function nextPow2Down(n: number): number {
+  let p = 1;
+  while (p * 2 <= n) p *= 2;
+  return p;
+}
+
+/** Build a single/double elimination bracket from already-ordered seeds (no shuffle).
+ *  rankedIds must be sorted best→worst. Top `size` (power of 2) are seeded into round 1. */
+export function buildSeededBracket(
+  format: "single" | "double",
+  rankedIds: string[],
+  isTeams: boolean,
+): Match[] {
+  const size = nextPow2Down(rankedIds.length);
+  if (size < 2) return [];
+  const top = rankedIds.slice(0, size);
+  const order = bracketOrder(size); // 1-indexed seed numbers in round-1 slot order
+  const seeded: string[] = order.map((s) => top[s - 1]);
+
+  const matches: Match[] = [];
+  // round 1
+  for (let i = 0; i < size / 2; i++) {
+    const a = seeded[i * 2];
+    const b = seeded[i * 2 + 1];
+    matches.push({
+      id: uid(),
+      round: 1,
+      slot: i,
+      bracket: format === "double" ? "winners" : undefined,
+      winnerId: null,
+      ...(isTeams ? { teamAId: a, teamBId: b } : { carAId: a, carBId: b }),
+    });
+  }
+  let prev = size / 2;
+  let round = 2;
+  while (prev > 1) {
+    for (let i = 0; i < prev / 2; i++) {
+      matches.push({
+        id: uid(),
+        round,
+        slot: i,
+        bracket: format === "double" ? "winners" : undefined,
+        winnerId: null,
+        ...(isTeams ? { teamAId: null, teamBId: null } : { carAId: null, carBId: null }),
+      });
+    }
+    prev = prev / 2;
+    round++;
+  }
+
+  if (format === "double") {
+    const winnersRounds = Math.log2(size);
+    for (let r = 1; r <= winnersRounds; r++) {
+      matches.push({
+        id: uid(),
+        round: r,
+        slot: 0,
+        bracket: "losers",
+        winnerId: null,
+        ...(isTeams ? { teamAId: null, teamBId: null } : { carAId: null, carBId: null }),
+      });
+    }
+    matches.push({
+      id: uid(),
+      round: winnersRounds + 1,
+      slot: 0,
+      bracket: "final",
+      winnerId: null,
+      ...(isTeams ? { teamAId: null, teamBId: null } : { carAId: null, carBId: null }),
+    });
+  }
+
+  return matches;
+}
+
+/** Rank championship qualifiers best→worst based on qualifying type. */
+export function rankQualifiers(t: Tournament, cars: Car[]): string[] {
+  const isTeams = t.participationType === "teams";
+  const ids = (isTeams ? t.teamIds : t.carIds) ?? [];
+
+  if (t.qualifyingType === "time-trial") {
+    const best = new Map<string, number>();
+    (t.times ?? []).forEach((e) => {
+      // For team championships time entries are still per-car; aggregate the team's best car time.
+      const ownerId = isTeams
+        ? ids.find((tid) => {
+            // we don't have team rosters here; fall back to carId itself if team membership not available
+            return tid === e.carId;
+          }) ?? e.carId
+        : e.carId;
+      const cur = best.get(ownerId);
+      if (cur === undefined || e.seconds < cur) best.set(ownerId, e.seconds);
+    });
+    return [...ids].sort((a, b) => {
+      const va = best.get(a);
+      const vb = best.get(b);
+      if (va === undefined && vb === undefined) return 0;
+      if (va === undefined) return 1;
+      if (vb === undefined) return -1;
+      return va - vb;
+    });
+  }
+
+  // round-robin qualifying: compute W/L from qualifyingMatches
+  const wl = new Map<string, { w: number; l: number }>();
+  ids.forEach((id) => wl.set(id, { w: 0, l: 0 }));
+  (t.qualifyingMatches ?? []).forEach((m) => {
+    if (!m.winnerId) return;
+    const aId = isTeams ? m.teamAId : m.carAId;
+    const bId = isTeams ? m.teamBId : m.carBId;
+    if (!aId || !bId) return;
+    const winner = wl.get(m.winnerId);
+    if (winner) winner.w++;
+    const loserId = aId === m.winnerId ? bId : aId;
+    const loser = wl.get(loserId);
+    if (loser) loser.l++;
+  });
+  return [...ids].sort((a, b) => {
+    const A = wl.get(a)!;
+    const B = wl.get(b)!;
+    return B.w - A.w || A.l - B.l;
+  });
+}
+
+/** Build qualifying matches for the championship's qualifying stage. */
+export function buildQualifyingMatches(
+  qualifyingType: "time-trial" | "round-robin",
+  participantIds: string[],
+  participationType: "cars" | "teams",
+): Match[] {
+  if (qualifyingType === "time-trial") return [];
+  return buildMatches("round-robin", participantIds, participationType);
+}
