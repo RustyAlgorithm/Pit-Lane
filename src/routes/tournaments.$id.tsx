@@ -338,6 +338,172 @@ function TimeTrialView({
   );
 }
 
+function ChampionshipView({
+  t,
+  cars,
+  teams,
+  carById,
+  teamById,
+  onPick,
+  onChange,
+}: {
+  t: Tournament;
+  cars: Car[];
+  teams: Team[];
+  carById: (id?: string | null) => Car | undefined;
+  teamById: (id?: string | null) => Team | undefined;
+  onPick: (matchId: string, winnerId: string) => void;
+  onChange: (updater: (prev: Tournament) => Tournament) => void;
+}) {
+  const isTeams = t.participationType === "teams";
+  const locked = !!t.qualifyingLocked;
+  const advance = t.advanceCount ?? 0;
+
+  function lockAndSeed() {
+    const ranked = rankQualifiers(t, cars);
+    if (ranked.length < 2) {
+      toast.error("Not enough qualifiers to seed a bracket.");
+      return;
+    }
+    const bracketFormat = t.qualifyingFormat ?? "single";
+    const top = ranked.slice(0, advance);
+    const matches = buildSeededBracket(bracketFormat, top, isTeams);
+    if (matches.length === 0) {
+      toast.error("Could not build a bracket from these qualifiers.");
+      return;
+    }
+    const seeds = top.map((id, i) => ({ participantId: id, seed: i + 1 }));
+    onChange((prev) => ({
+      ...prev,
+      qualifyingLocked: true,
+      seeds,
+      matches,
+      champion: null,
+      championType: null,
+    }));
+    toast.success("Bracket seeded");
+  }
+
+  function unlock() {
+    if (!confirm("Unlock qualifying and clear the bracket?")) return;
+    onChange((prev) => ({
+      ...prev,
+      qualifyingLocked: false,
+      seeds: undefined,
+      matches: [],
+      champion: null,
+      championType: null,
+    }));
+  }
+
+  // Qualifying section ------------------------------------------------------
+  function QualifyingTimeTrial() {
+    return (
+      <TimeTrialView
+        t={t}
+        cars={cars}
+        teams={teams}
+        onChange={(u) => onChange(u)}
+      />
+    );
+  }
+
+  function QualifyingRoundRobin() {
+    const carByIdLocal = (id?: string | null) => (id ? cars.find((c) => c.id === id) : undefined);
+    const teamByIdLocal = (id?: string | null) => (id ? teams.find((tm) => tm.id === id) : undefined);
+    function pickQualifying(matchId: string, winnerId: string) {
+      onChange((prev) => ({
+        ...prev,
+        qualifyingMatches: (prev.qualifyingMatches ?? []).map((m) =>
+          m.id === matchId ? { ...m, winnerId } : m,
+        ),
+      }));
+    }
+    const qms = t.qualifyingMatches ?? [];
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        {qms.map((m, i) => (
+          <MatchCell
+            key={m.id}
+            label={`Qualifier ${i + 1}`}
+            carA={isTeams ? undefined : carByIdLocal(m.carAId)}
+            carB={isTeams ? undefined : carByIdLocal(m.carBId)}
+            teamA={isTeams ? teamByIdLocal(m.teamAId) : undefined}
+            teamB={isTeams ? teamByIdLocal(m.teamBId) : undefined}
+            winnerId={m.winnerId}
+            onPick={(id) => pickQualifying(m.id, id)}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // Live preview of seeding --------------------------------------------------
+  const ranked = rankQualifiers(t, cars);
+  const previewTop = ranked.slice(0, advance);
+  const nameOf = (id: string) => (isTeams ? teamById(id)?.name : carById(id)?.name) ?? "—";
+
+  return (
+    <div className="mt-8 space-y-10">
+      <section>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wider">
+            Qualifying — {t.qualifyingType === "round-robin" ? "Round-robin" : "Time trial"}
+            {locked ? " (locked)" : ""}
+          </h2>
+          {!locked ? (
+            <Button size="sm" onClick={lockAndSeed}>
+              Lock qualifying & seed bracket
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" onClick={unlock}>
+              Unlock qualifying
+            </Button>
+          )}
+        </div>
+        <div className={locked ? "pointer-events-none opacity-70" : ""}>
+          {t.qualifyingType === "round-robin" ? <QualifyingRoundRobin /> : <QualifyingTimeTrial />}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">
+          Championship bracket {locked ? `(top ${advance})` : "— preview"}
+        </h2>
+        {!locked ? (
+          <Card className="p-4 shadow-[var(--shadow-card)]">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Lock qualifying to build the bracket. Top {advance} will be seeded 1 v {advance}, 2 v{" "}
+              {advance - 1}, …
+            </p>
+            <div className="grid gap-1 text-sm">
+              {previewTop.length === 0 ? (
+                <span className="text-muted-foreground">No qualifying results yet.</span>
+              ) : (
+                previewTop.map((id, i) => (
+                  <div key={id} className="flex items-center gap-3">
+                    <span className="w-6 text-xs font-semibold tabular-nums text-muted-foreground">
+                      #{i + 1}
+                    </span>
+                    <span className="truncate font-medium">{nameOf(id)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+        ) : (
+          <Bracket
+            t={{ ...t, format: t.qualifyingFormat ?? "single" }}
+            carById={carById}
+            teamById={teamById}
+            onPick={onPick}
+          />
+        )}
+      </section>
+    </div>
+  );
+}
+
 function MatchCell({
   carA, carB, teamA, teamB, winnerId, onPick, label,
 }: {
