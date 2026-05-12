@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useLocalStorage, uid } from "@/lib/storage";
-import type { Car, Tournament, TimeEntry } from "@/lib/types";
+import type { Car, Tournament, TimeEntry, Team } from "@/lib/types";
 import { applyWinner, standingsFor } from "@/lib/bracket";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,7 +31,8 @@ export const Route = createFileRoute("/tournaments/$id")({
 function TournamentDetail() {
   const { id } = Route.useParams();
   const [tournaments, setTournaments] = useLocalStorage<Tournament[]>("pitlane.tournaments", []);
-  const [cars] = useLocalStorage<Car[]>("pitlane.cars", []);
+  const [cars, setCars] = useLocalStorage<Car[]>("pitlane.cars", []);
+  const [teams, setTeams] = useLocalStorage<Team[]>("pitlane.teams", []);
   const t = tournaments.find((x) => x.id === id);
 
   if (!t) {
@@ -44,28 +45,46 @@ function TournamentDetail() {
   }
 
   const carById = (cid?: string | null) => (cid ? cars.find((c) => c.id === cid) : undefined);
-  const champ = t.champion ? carById(t.champion) : null;
+  const teamById = (tid?: string | null) => (tid ? teams.find((tm) => tm.id === tid) : undefined);
+  const champ = t.champion ? (t.championType === "team" ? teamById(t.champion) : carById(t.champion)) : null;
 
   function pickWinner(matchId: string, winnerId: string) {
     setTournaments((prev) => prev.map((x) => (x.id === t!.id ? applyWinner(x, matchId, winnerId) : x)));
+    
+    // Increment wins for the winner
+    if (t.participationType === "teams") {
+      setTeams((prev) => prev.map((tm) => (tm.id === winnerId ? { ...tm, wins: (tm.wins ?? 0) + 1 } : tm)));
+    } else {
+      setCars((prev) => prev.map((c) => (c.id === winnerId ? { ...c, wins: (c.wins ?? 0) + 1 } : c)));
+    }
   }
 
   function reset() {
     setTournaments((prev) =>
       prev.map((x) => {
         if (x.id !== t!.id) return x;
+        const isTeams = x.participationType === "teams";
         const matches = x.matches.map((m) => {
           if (x.format === "round-robin") return { ...m, winnerId: null };
           // elimination: keep only round-1 winners-bracket pairings
           const isRound1Winners = m.round === 1 && (m.bracket === undefined || m.bracket === "winners");
-          return {
-            ...m,
-            winnerId: null,
-            carAId: isRound1Winners ? m.carAId : null,
-            carBId: isRound1Winners ? m.carBId : null,
-          };
+          if (isTeams) {
+            return {
+              ...m,
+              winnerId: null,
+              teamAId: isRound1Winners ? m.teamAId : null,
+              teamBId: isRound1Winners ? m.teamBId : null,
+            };
+          } else {
+            return {
+              ...m,
+              winnerId: null,
+              carAId: isRound1Winners ? m.carAId : null,
+              carBId: isRound1Winners ? m.carBId : null,
+            };
+          }
         });
-        return { ...x, champion: null, matches };
+        return { ...x, champion: null, championType: null, matches };
       }),
     );
   }
@@ -79,7 +98,7 @@ function TournamentDetail() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t.name}</h1>
           <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            {t.format === "single" ? "Single elimination" : t.format === "double" ? "Double elimination" : "Round-robin"} • {t.carIds.length} cars
+            {t.format === "single" ? "Single elimination" : t.format === "double" ? "Double elimination" : "Round-robin"} • {t.participationType === "teams" ? (t.teamIds?.length || 0) : (t.carIds?.length || 0)} {t.participationType === "teams" ? "teams" : "cars"}
           </p>
         </div>
         {champ ? (
@@ -90,17 +109,18 @@ function TournamentDetail() {
       </div>
 
       {t.format === "round-robin" ? (
-        <RoundRobin t={t} cars={cars} onPick={pickWinner} />
+        <RoundRobin t={t} cars={cars} teams={teams} onPick={pickWinner} />
       ) : t.format === "time-trial" ? (
         <TimeTrialView
           t={t}
           cars={cars}
+          teams={teams}
           onChange={(updater) =>
             setTournaments((prev) => prev.map((x) => (x.id === t!.id ? updater(x) : x)))
           }
         />
       ) : (
-        <Bracket t={t} carById={carById} onPick={pickWinner} />
+        <Bracket t={t} carById={carById} teamById={teamById} onPick={pickWinner} />
       )}
 
       <div className="mt-10 flex justify-end">
@@ -132,18 +152,28 @@ function recomputeTTChampion(t: Tournament): Tournament {
 function TimeTrialView({
   t,
   cars,
+  teams,
   onChange,
 }: {
   t: Tournament;
   cars: Car[];
+  teams: Team[];
   onChange: (updater: (prev: Tournament) => Tournament) => void;
 }) {
-  const [selectedCarId, setSelectedCarId] = useState<string>(t.carIds[0] ?? "");
+  const isTeams = t.participationType === "teams";
+  
+  // Get roster: for car tournaments use carIds directly, for team tournaments get cars from team members
+  const allRosterCars = isTeams
+    ? (t.teamIds ?? []).flatMap((teamId) => {
+        const team = teams.find((tm) => tm.id === teamId);
+        return team ? team.carIds : [];
+      }).map((carId) => cars.find((c) => c.id === carId)).filter((c): c is Car => !!c)
+    : (t.carIds ?? []).map((id) => cars.find((c) => c.id === id)).filter((c): c is Car => !!c);
+  
+  const [selectedCarId, setSelectedCarId] = useState<string>(allRosterCars[0]?.id ?? "");
   const [secondsInput, setSecondsInput] = useState("");
 
-  const roster = t.carIds
-    .map((id) => cars.find((c) => c.id === id))
-    .filter((c): c is Car => !!c);
+  const roster = allRosterCars;
   const times = t.times ?? [];
   const unit = t.trackUnit ?? "cm";
 
@@ -281,26 +311,39 @@ function TimeTrialView({
 }
 
 function MatchCell({
-  carA, carB, winnerId, onPick, label,
+  carA, carB, teamA, teamB, winnerId, onPick, label,
 }: {
   carA?: Car; carB?: Car;
+  teamA?: Team; teamB?: Team;
   winnerId?: string | null;
   onPick: (id: string) => void;
   label?: string;
 }) {
-  const Slot = ({ car, isWinner }: { car?: Car; isWinner: boolean }) => (
+  const isTeams = !!teamA || !!teamB;
+  const aId = isTeams ? teamA?.id : carA?.id;
+  const bId = isTeams ? teamB?.id : carB?.id;
+  const aName = isTeams ? teamA?.name : carA?.name;
+  const bName = isTeams ? teamB?.name : carB?.name;
+  
+  const Slot = ({ id, name, isWinner }: { id?: string; name?: string; isWinner: boolean }) => (
     <button
       type="button"
-      disabled={!car || !carA || !carB || !!winnerId}
-      onClick={() => car && onPick(car.id)}
+      disabled={!id || !aId || !bId || !!winnerId}
+      onClick={() => id && onPick(id)}
       className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
         isWinner ? "bg-primary/10 font-semibold text-primary" : "hover:bg-secondary"
-      } ${!car ? "text-muted-foreground" : ""} disabled:cursor-default`}
+      } ${!id ? "text-muted-foreground" : ""} disabled:cursor-default`}
     >
-      <span className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded bg-secondary">
-        {car?.photo ? <img src={car.photo} alt="" className="h-full w-full object-cover" /> : <CarIcon className="h-3.5 w-3.5 text-muted-foreground" />}
-      </span>
-      <span className="flex-1 truncate">{car?.name ?? "TBD"}</span>
+      {!isTeams && (
+        <span className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded bg-secondary">
+          {carA?.photo || carB?.photo ? (
+            <img src={carA?.photo || carB?.photo} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <CarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </span>
+      )}
+      <span className="flex-1 truncate">{name ?? "TBD"}</span>
       {isWinner && <Trophy className="h-3.5 w-3.5" />}
     </button>
   );
@@ -308,21 +351,23 @@ function MatchCell({
   return (
     <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
       {label && <div className="border-b border-border bg-secondary/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>}
-      <Slot car={carA} isWinner={winnerId === carA?.id} />
+      <Slot id={aId} name={aName} isWinner={winnerId === aId} />
       <div className="border-t border-border" />
-      <Slot car={carB} isWinner={winnerId === carB?.id} />
+      <Slot id={bId} name={bName} isWinner={winnerId === bId} />
     </Card>
   );
 }
 
 function Bracket({
-  t, carById, onPick,
+  t, carById, teamById, onPick,
 }: {
   t: Tournament;
   carById: (id?: string | null) => Car | undefined;
+  teamById?: (id?: string | null) => Team | undefined;
   onPick: (matchId: string, winnerId: string) => void;
 }) {
   const isDouble = t.format === "double";
+  const isTeams = t.participationType === "teams";
 
   if (!isDouble) {
     const rounds = [...new Set(t.matches.map((m) => m.round))].sort((a, b) => a - b);
@@ -339,8 +384,10 @@ function Bracket({
                 {ms.map((m) => (
                   <MatchCell
                     key={m.id}
-                    carA={carById(m.carAId)}
-                    carB={carById(m.carBId)}
+                    carA={isTeams ? undefined : carById(m.carAId)}
+                    carB={isTeams ? undefined : carById(m.carBId)}
+                    teamA={isTeams ? teamById?.(m.teamAId) : undefined}
+                    teamB={isTeams ? teamById?.(m.teamBId) : undefined}
                     winnerId={m.winnerId}
                     onPick={(id) => onPick(m.id, id)}
                   />
@@ -364,7 +411,15 @@ function Bracket({
     <div className="flex min-w-[220px] flex-col gap-3">
       <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</div>
       {matches.map((m) => (
-        <MatchCell key={m.id} carA={carById(m.carAId)} carB={carById(m.carBId)} winnerId={m.winnerId} onPick={(id) => onPick(m.id, id)} />
+        <MatchCell 
+          key={m.id} 
+          carA={isTeams ? undefined : carById(m.carAId)} 
+          carB={isTeams ? undefined : carById(m.carBId)}
+          teamA={isTeams ? teamById?.(m.teamAId) : undefined}
+          teamB={isTeams ? teamById?.(m.teamBId) : undefined}
+          winnerId={m.winnerId} 
+          onPick={(id) => onPick(m.id, id)} 
+        />
       ))}
     </div>
   );
@@ -397,9 +452,11 @@ function Bracket({
   );
 }
 
-function RoundRobin({ t, cars, onPick }: { t: Tournament; cars: Car[]; onPick: (matchId: string, winnerId: string) => void }) {
+function RoundRobin({ t, cars, teams, onPick }: { t: Tournament; cars: Car[]; teams: Team[]; onPick: (matchId: string, winnerId: string) => void }) {
   const standings = standingsFor(t, cars);
+  const isTeams = t.participationType === "teams";
   const carById = (id?: string | null) => (id ? cars.find((c) => c.id === id) : undefined);
+  const teamById = (id?: string | null) => (id ? teams.find((tm) => tm.id === id) : undefined);
 
   return (
     <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_320px]">
@@ -410,8 +467,10 @@ function RoundRobin({ t, cars, onPick }: { t: Tournament; cars: Car[]; onPick: (
             <MatchCell
               key={m.id}
               label={`Match ${i + 1}`}
-              carA={carById(m.carAId)}
-              carB={carById(m.carBId)}
+              carA={isTeams ? undefined : carById(m.carAId)}
+              carB={isTeams ? undefined : carById(m.carBId)}
+              teamA={isTeams ? teamById(m.teamAId) : undefined}
+              teamB={isTeams ? teamById(m.teamBId) : undefined}
               winnerId={m.winnerId}
               onPick={(id) => onPick(m.id, id)}
             />
@@ -422,13 +481,13 @@ function RoundRobin({ t, cars, onPick }: { t: Tournament; cars: Car[]; onPick: (
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">Standings</h2>
         <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
           <div className="grid grid-cols-[1fr_40px_40px] gap-2 border-b border-border bg-secondary/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <span>Car</span><span className="text-right">W</span><span className="text-right">L</span>
+            <span>{isTeams ? "Team" : "Car"}</span><span className="text-right">W</span><span className="text-right">L</span>
           </div>
           {standings.map((s, i) => (
-            <div key={s.car.id} className={`grid grid-cols-[1fr_40px_40px] items-center gap-2 px-3 py-2 text-sm ${i === 0 && s.w > 0 ? "bg-primary/5" : ""}`}>
+            <div key={s.name} className={`grid grid-cols-[1fr_40px_40px] items-center gap-2 px-3 py-2 text-sm ${i === 0 && s.w > 0 ? "bg-primary/5" : ""}`}>
               <div className="flex items-center gap-2 truncate">
                 <span className="w-4 text-xs text-muted-foreground tabular-nums">{i + 1}</span>
-                <span className="truncate font-medium">{s.car.name}</span>
+                <span className="truncate font-medium">{s.name}</span>
               </div>
               <span className="text-right font-semibold tabular-nums">{s.w}</span>
               <span className="text-right text-muted-foreground tabular-nums">{s.l}</span>

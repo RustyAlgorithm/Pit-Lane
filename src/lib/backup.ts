@@ -62,6 +62,7 @@ const carSchema = z.object({
   photo: z.string().max(2048).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   createdAt: z.number().int().nonnegative(),
+  wins: z.number().nonnegative().optional(),
 });
 
 const matchSchema = z.object({
@@ -71,7 +72,10 @@ const matchSchema = z.object({
   bracket: z.enum(["winners", "losers", "final"]).optional(),
   carAId: z.string().nullable().optional(),
   carBId: z.string().nullable().optional(),
+  teamAId: z.string().nullable().optional(),
+  teamBId: z.string().nullable().optional(),
   winnerId: z.string().nullable().optional(),
+  winnerType: z.enum(["car", "team"]).nullable().optional(),
   isGroup: z.boolean().optional(),
 });
 
@@ -79,10 +83,13 @@ const tournamentSchema = z.object({
   id: z.string().min(1, "missing id"),
   name: z.string().min(1, "missing name").max(120),
   format: z.enum(["single", "double", "round-robin", "time-trial"]),
-  carIds: z.array(z.string()),
+  participationType: z.enum(["cars", "teams"]),
+  carIds: z.array(z.string()).optional(),
+  teamIds: z.array(z.string()).optional(),
   matches: z.array(matchSchema),
   createdAt: z.number().int().nonnegative(),
   champion: z.string().nullable().optional(),
+  championType: z.enum(["car", "team"]).nullable().optional(),
   trackLength: z.number().positive().max(100000).optional(),
   trackUnit: z.enum(["cm", "m", "ft"]).optional(),
   times: z
@@ -104,6 +111,7 @@ const teamSchema = z.object({
   carIds: z.array(z.string()),
   notes: z.string().max(500).optional().nullable(),
   createdAt: z.number().int().nonnegative(),
+  wins: z.number().nonnegative().optional(),
 });
 
 const manifestSchema = z.object({

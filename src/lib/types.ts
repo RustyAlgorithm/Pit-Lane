@@ -20,6 +20,7 @@ export interface Car {
   photo?: string; // dataURL
   notes?: string;
   createdAt: number;
+  wins?: number;
 }
 
 export interface Match {
@@ -62,4 +63,5 @@ export interface Team {
   sponsor?: string;
   notes?: string;
   createdAt: number;
+  wins?: number;
 }

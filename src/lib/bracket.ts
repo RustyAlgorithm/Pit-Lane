@@ -131,7 +131,10 @@ export function applyWinner(t: Tournament, matchId: string, winnerId: string): T
   if (idx === -1) return t;
   const m = matches[idx];
   m.winnerId = winnerId;
-  const loserId = m.carAId === winnerId ? m.carBId : m.carAId;
+  const isTeams = t.participationType === "teams";
+  const aId = isTeams ? m.teamAId : m.carAId;
+  const bId = isTeams ? m.teamBId : m.carBId;
+  const loserId = aId === winnerId ? bId : aId;
 
   if (t.format === "round-robin") {
     return { ...t, matches };
@@ -143,11 +146,16 @@ export function applyWinner(t: Tournament, matchId: string, winnerId: string): T
       (n) => n.round === m.round + 1 && n.slot === Math.floor(m.slot / 2),
     );
     if (next) {
-      if (m.slot % 2 === 0) next.carAId = winnerId;
-      else next.carBId = winnerId;
+      if (m.slot % 2 === 0) {
+        if (isTeams) next.teamAId = winnerId;
+        else next.carAId = winnerId;
+      } else {
+        if (isTeams) next.teamBId = winnerId;
+        else next.carBId = winnerId;
+      }
     } else {
       // this was the final
-      return { ...t, matches, champion: winnerId };
+      return { ...t, matches, champion: winnerId, championType: isTeams ? "team" : "car" };
     }
     return { ...t, matches };
   }
@@ -160,21 +168,34 @@ export function applyWinner(t: Tournament, matchId: string, winnerId: string): T
         (n) => n.bracket === "winners" && n.round === m.round + 1 && n.slot === Math.floor(m.slot / 2),
       );
       if (next) {
-        if (m.slot % 2 === 0) next.carAId = winnerId;
-        else next.carBId = winnerId;
+        if (m.slot % 2 === 0) {
+          if (isTeams) next.teamAId = winnerId;
+          else next.carAId = winnerId;
+        } else {
+          if (isTeams) next.teamBId = winnerId;
+          else next.carBId = winnerId;
+        }
       }
     } else {
       // winners final -> grand final A
       const gf = matches.find((n) => n.bracket === "final");
-      if (gf) gf.carAId = winnerId;
+      if (gf) {
+        if (isTeams) gf.teamAId = winnerId;
+        else gf.carAId = winnerId;
+      }
     }
     // send loser to losers bracket linear chain
     if (loserId) {
-      const lb = matches.find((n) => n.bracket === "losers" && n.round === m.round && !n.carAId);
-      if (lb) lb.carAId = loserId;
-      else {
-        const lb2 = matches.find((n) => n.bracket === "losers" && n.round === m.round && !n.carBId);
-        if (lb2) lb2.carBId = loserId;
+      const lb = matches.find((n) => n.bracket === "losers" && n.round === m.round && !(isTeams ? n.teamAId : n.carAId));
+      if (lb) {
+        if (isTeams) lb.teamAId = loserId;
+        else lb.carAId = loserId;
+      } else {
+        const lb2 = matches.find((n) => n.bracket === "losers" && n.round === m.round && !(isTeams ? n.teamBId : n.carBId));
+        if (lb2) {
+          if (isTeams) lb2.teamBId = loserId;
+          else lb2.carBId = loserId;
+        }
       }
     }
   } else if (m.bracket === "losers") {
@@ -182,31 +203,51 @@ export function applyWinner(t: Tournament, matchId: string, winnerId: string): T
     if (m.round < losersRounds) {
       const next = matches.find((n) => n.bracket === "losers" && n.round === m.round + 1);
       if (next) {
-        if (!next.carAId) next.carAId = winnerId;
-        else if (!next.carBId) next.carBId = winnerId;
+        if (isTeams) {
+          if (!next.teamAId) next.teamAId = winnerId;
+          else if (!next.teamBId) next.teamBId = winnerId;
+        } else {
+          if (!next.carAId) next.carAId = winnerId;
+          else if (!next.carBId) next.carBId = winnerId;
+        }
       }
     } else {
       const gf = matches.find((n) => n.bracket === "final");
-      if (gf) gf.carBId = winnerId;
+      if (gf) {
+        if (isTeams) gf.teamBId = winnerId;
+        else gf.carBId = winnerId;
+      }
     }
   } else if (m.bracket === "final") {
-    return { ...t, matches, champion: winnerId };
+    return { ...t, matches, champion: winnerId, championType: isTeams ? "team" : "car" };
   }
 
   return { ...t, matches };
 }
 
 export function standingsFor(t: Tournament, cars: Car[]) {
-  const map = new Map<string, { car: Car; w: number; l: number }>();
-  t.carIds.forEach((id) => {
-    const c = cars.find((x) => x.id === id);
-    if (c) map.set(id, { car: c, w: 0, l: 0 });
-  });
+  const map = new Map<string, { name: string; w: number; l: number }>();
+  const isTeams = t.participationType === "teams";
+  
+  if (isTeams) {
+    (t.teamIds ?? []).forEach((id) => {
+      map.set(id, { name: "", w: 0, l: 0 });
+    });
+  } else {
+    (t.carIds ?? []).forEach((id) => {
+      const c = cars.find((x) => x.id === id);
+      if (c) map.set(id, { name: c.name, w: 0, l: 0 });
+    });
+  }
+  
   t.matches.forEach((m) => {
-    if (!m.winnerId || !m.carAId || !m.carBId) return;
+    if (!m.winnerId) return;
+    const aId = isTeams ? m.teamAId : m.carAId;
+    const bId = isTeams ? m.teamBId : m.carBId;
+    if (!aId || !bId) return;
     const winner = map.get(m.winnerId);
     if (winner) winner.w++;
-    const loserId = m.carAId === m.winnerId ? m.carBId : m.carAId;
+    const loserId = aId === m.winnerId ? bId : aId;
     const loser = map.get(loserId);
     if (loser) loser.l++;
   });

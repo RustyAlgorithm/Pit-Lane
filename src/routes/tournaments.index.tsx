@@ -48,9 +48,21 @@ function TournamentsPage() {
 
   function create() {
     if (!name.trim()) return toast.error("Tournament name required");
-    const minParticipants = format === "time-trial" ? 1 : 2;
-    if (picked.length < minParticipants)
-      return toast.error(format === "time-trial" ? `Pick at least 1 ${participationType === "cars" ? "car" : "team"}` : `Pick at least 2 ${participationType === "cars" ? "cars" : "teams"}`);
+    let minParticipants = 2;
+    if (format === "time-trial") minParticipants = 1;
+    if (format === "double") minParticipants = 3;
+    if (format === "round-robin") minParticipants = 3;
+    if (picked.length < minParticipants) {
+      if (format === "time-trial") {
+        return toast.error(`Pick at least 1 ${participationType === "cars" ? "car" : "team"}`);
+      } else if (format === "double") {
+        return toast.error(`Pick at least 3 ${participationType === "cars" ? "cars" : "teams"} for double elimination`);
+      } else if (format === "round-robin") {
+        return toast.error(`Pick at least 3 ${participationType === "cars" ? "cars" : "teams"} for round-robin`);
+      } else {
+        return toast.error(`Pick at least 2 ${participationType === "cars" ? "cars" : "teams"}`);
+      }
+    }
     let trackLengthNum: number | undefined;
     if (format === "time-trial") {
       trackLengthNum = Number(trackLength);
