@@ -18,6 +18,7 @@ function nextPow2(n: number) {
 
 export function buildMatches(format: BracketFormat, participantIds: string[], participationType: "cars" | "teams" = "cars"): Match[] {
   if (format === "time-trial") return [];
+  if (format === "championship") return [];
   if (participantIds.length < 2) return [];
   const ids = shuffle(participantIds);
   const isTeams = participationType === "teams";
