@@ -11,12 +11,13 @@ export function SiteHeader() {
             <Flag className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
           </span>
           <div className="leading-tight">
-            <div className="text-sm font-bold tracking-tight">PIT LANE</div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Diecast League</div>
+            <div className="text-sm font-bold tracking-tight">PIT LANE - Beta</div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Diecast Racing League</div>
           </div>
         </Link>
         <div className="flex items-center gap-2">
           <nav className="flex items-center gap-1 text-sm">
+            <NavLink to="https://forms.office.com/r/kyDtrZ6USH">Feedback</NavLink>
             <NavLink to="/garage">Garage</NavLink>
             <NavLink to="/teams">Teams</NavLink>
             <NavLink to="/tournaments">Tournaments</NavLink>
