@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { useLocalStorage } from "@/lib/storage";
 import type { Car, Tournament } from "@/lib/types";
 import { Car as CarIcon, Trophy, Users, ArrowRight } from "lucide-react";
+import { Banner } from "@/components/Banner";
 
 export const Route = createFileRoute("/")({
   head: () => ({

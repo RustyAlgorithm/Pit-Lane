@@ -10,6 +10,7 @@ import {
 
 import appCss from "../styles.css?url";
 import { SiteHeader } from "@/components/SiteHeader";
+import Banner from "@/components/Banner";
 import { ThemeProvider, useTheme } from "@/components/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { getThemeInitScript } from "@/lib/theme";
@@ -102,6 +103,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <script src="https://t.contentsquare.net/uxa/c636f027eadeb.js"></script>
         <script dangerouslySetInnerHTML={{ __html: getThemeInitScript() }} />
         <HeadContent />
       </head>
@@ -132,6 +134,10 @@ function AppFrame() {
     <>
       <div className="min-h-screen bg-background text-foreground">
         <SiteHeader />
+        <Banner 
+          type="info"
+          message="Welcome to the Open Beta - Please feel free to use the feedback link at the top of the page. we are using an anonymous system what allows us to see how you use the app with a service called HotJar."
+        />
         <Outlet />
       </div>
       <Toaster richColors position="top-center" theme={resolvedTheme} />

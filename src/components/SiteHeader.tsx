@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Flag } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
+
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/70">
