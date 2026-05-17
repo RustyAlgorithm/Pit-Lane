@@ -467,7 +467,18 @@ function TournamentDetail() {
       </div>
 
       {tournament.format === "round-robin" ? (
-        <RoundRobin t={tournament} cars={cars} teams={teams} onPick={pickWinner} />
+        <RoundRobin
+          t={tournament}
+          cars={cars}
+          teams={teams}
+          onPick={pickWinner}
+          onSelectSeriesCar={(mId, gId, side, cId) =>
+            selectSeriesCar("matches", mId, gId, side, cId)
+          }
+          onPickSeriesGame={(mId, gId, cId) =>
+            pickSeriesGameWinner("matches", mId, gId, cId)
+          }
+        />
       ) : tournament.format === "time-trial" ? (
         <TimeTrialView
           t={tournament}
@@ -490,7 +501,19 @@ function TournamentDetail() {
           }
         />
       ) : (
-        <Bracket t={tournament} carById={carById} teamById={teamById} onPick={pickWinner} />
+        <Bracket
+          t={tournament}
+          cars={cars}
+          carById={carById}
+          teamById={teamById}
+          onPick={pickWinner}
+          onSelectSeriesCar={(mId, gId, side, cId) =>
+            selectSeriesCar("matches", mId, gId, side, cId)
+          }
+          onPickSeriesGame={(mId, gId, cId) =>
+            pickSeriesGameWinner("matches", mId, gId, cId)
+          }
+        />
       )}
 
       <div className="mt-10 flex justify-end gap-2">
