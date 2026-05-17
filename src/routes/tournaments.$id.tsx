@@ -161,6 +161,9 @@ function TournamentDetail() {
         const matches = x.matches.map((m) => ({
           ...m,
           winnerId: null,
+          series: m.series
+            ? m.series.map((g) => ({ ...g, carAId: null, carBId: null, winnerCarId: null }))
+            : m.series,
           ...(isTeams ? { teamAId: m.teamAId, teamBId: m.teamBId } : { carAId: m.carAId, carBId: m.carBId }),
         }));
         return { ...x, champion: null, championType: null, matches, previousSeasons: newPreviousSeasons };
@@ -381,10 +384,14 @@ function TournamentDetail() {
           if (x.format === "round-robin") return { ...m, winnerId: null };
           // elimination: keep only round-1 winners-bracket pairings
           const isRound1Winners = m.round === 1 && (m.bracket === undefined || m.bracket === "winners");
+          const clearedSeries = m.series
+            ? m.series.map((g) => ({ ...g, carAId: null, carBId: null, winnerCarId: null }))
+            : m.series;
           if (isTeams) {
             return {
               ...m,
               winnerId: null,
+              series: clearedSeries,
               teamAId: isRound1Winners ? m.teamAId : null,
               teamBId: isRound1Winners ? m.teamBId : null,
             };
@@ -392,6 +399,7 @@ function TournamentDetail() {
             return {
               ...m,
               winnerId: null,
+              series: clearedSeries,
               carAId: isRound1Winners ? m.carAId : null,
               carBId: isRound1Winners ? m.carBId : null,
             };
