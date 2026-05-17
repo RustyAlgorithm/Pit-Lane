@@ -381,7 +381,15 @@ function TournamentDetail() {
         if (x.id !== tournament.id) return x;
         const isTeams = x.participationType === "teams";
         const matches = x.matches.map((m) => {
-          if (x.format === "round-robin") return { ...m, winnerId: null };
+          if (x.format === "round-robin") {
+            return {
+              ...m,
+              winnerId: null,
+              series: m.series
+                ? m.series.map((g) => ({ ...g, carAId: null, carBId: null, winnerCarId: null }))
+                : m.series,
+            };
+          }
           // elimination: keep only round-1 winners-bracket pairings
           const isRound1Winners = m.round === 1 && (m.bracket === undefined || m.bracket === "winners");
           const clearedSeries = m.series
