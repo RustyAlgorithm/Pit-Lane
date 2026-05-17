@@ -724,6 +724,136 @@ function TimeTrialView({
   );
 }
 
+function SeriesMatchCell({
+  match,
+  teamA,
+  teamB,
+  cars,
+  onSelectCar,
+  onPickWinner,
+  label,
+}: {
+  match: import("@/lib/types").Match;
+  teamA?: Team;
+  teamB?: Team;
+  cars: Car[];
+  onSelectCar: (gameId: string, side: "A" | "B", carId: string | null) => void;
+  onPickWinner: (gameId: string, winnerCarId: string) => void;
+  label?: string;
+}) {
+  const aRoster = (teamA?.carIds ?? [])
+    .map((id) => cars.find((c) => c.id === id))
+    .filter((c): c is Car => !!c);
+  const bRoster = (teamB?.carIds ?? [])
+    .map((id) => cars.find((c) => c.id === id))
+    .filter((c): c is Car => !!c);
+  const series = match.series ?? [];
+  const matchDone = !!match.winnerId;
+  const winnerName =
+    match.winnerId === teamA?.id
+      ? teamA?.name
+      : match.winnerId === teamB?.id
+        ? teamB?.name
+        : null;
+  return (
+    <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
+      {label && (
+        <div className="border-b border-border bg-secondary/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm font-semibold">
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          {teamA && (
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: teamA.color }} />
+          )}
+          <span className="truncate">{teamA?.name ?? "TBD"}</span>
+        </span>
+        <span className="text-[10px] uppercase text-muted-foreground">vs</span>
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          <span className="truncate">{teamB?.name ?? "TBD"}</span>
+          {teamB && (
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: teamB.color }} />
+          )}
+        </span>
+      </div>
+      {winnerName && (
+        <div className="flex items-center gap-1.5 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+          <Trophy className="h-3 w-3" /> Series winner: {winnerName}
+        </div>
+      )}
+      <div className="space-y-2 p-2">
+        {series.map((g, i) => {
+          const winnerA = g.winnerCarId && g.carAId === g.winnerCarId;
+          const winnerB = g.winnerCarId && g.carBId === g.winnerCarId;
+          const aName = cars.find((c) => c.id === g.carAId)?.name;
+          const bName = cars.find((c) => c.id === g.carBId)?.name;
+          return (
+            <div key={g.id} className="rounded border border-border bg-secondary/30 p-2">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Race {i + 1}
+              </div>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+                <select
+                  disabled={!teamA || !!g.winnerCarId || matchDone}
+                  className="h-8 min-w-0 rounded border border-input bg-transparent px-2 text-xs disabled:opacity-60"
+                  value={g.carAId ?? ""}
+                  onChange={(e) => onSelectCar(g.id, "A", e.target.value || null)}
+                >
+                  <option value="">Pick car…</option>
+                  {aRoster.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[10px] text-muted-foreground">vs</span>
+                <select
+                  disabled={!teamB || !!g.winnerCarId || matchDone}
+                  className="h-8 min-w-0 rounded border border-input bg-transparent px-2 text-xs disabled:opacity-60"
+                  value={g.carBId ?? ""}
+                  onChange={(e) => onSelectCar(g.id, "B", e.target.value || null)}
+                >
+                  <option value="">Pick car…</option>
+                  {bRoster.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-1.5 flex gap-1">
+                <Button
+                  size="sm"
+                  variant={winnerA ? "default" : "outline"}
+                  disabled={!g.carAId || !g.carBId || !!g.winnerCarId || matchDone}
+                  onClick={() => g.carAId && onPickWinner(g.id, g.carAId)}
+                  className="h-7 flex-1 truncate text-xs"
+                  title={aName}
+                >
+                  {winnerA && <Trophy className="mr-1 h-3 w-3" />}
+                  {aName ?? "A"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={winnerB ? "default" : "outline"}
+                  disabled={!g.carAId || !g.carBId || !!g.winnerCarId || matchDone}
+                  onClick={() => g.carBId && onPickWinner(g.id, g.carBId)}
+                  className="h-7 flex-1 truncate text-xs"
+                  title={bName}
+                >
+                  {winnerB && <Trophy className="mr-1 h-3 w-3" />}
+                  {bName ?? "B"}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function ChampionshipView({
   t,
   cars,
