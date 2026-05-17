@@ -230,6 +230,125 @@ function TournamentDetail() {
     }
   }
 
+  function selectSeriesCar(
+    matchKey: "matches" | "qualifyingMatches",
+    matchId: string,
+    gameId: string,
+    side: "A" | "B",
+    carId: string | null,
+  ) {
+    setTournaments((prev) =>
+      prev.map((x) => {
+        if (x.id !== tournament.id) return x;
+        const list = (matchKey === "matches" ? x.matches : x.qualifyingMatches) ?? [];
+        const newList = list.map((m) =>
+          m.id === matchId && m.series
+            ? {
+                ...m,
+                series: m.series.map((g) =>
+                  g.id === gameId
+                    ? { ...g, [side === "A" ? "carAId" : "carBId"]: carId }
+                    : g,
+                ),
+              }
+            : m,
+        );
+        return matchKey === "matches"
+          ? { ...x, matches: newList }
+          : { ...x, qualifyingMatches: newList };
+      }),
+    );
+  }
+
+  function pickSeriesGameWinner(
+    matchKey: "matches" | "qualifyingMatches",
+    matchId: string,
+    gameId: string,
+    winnerCarId: string,
+  ) {
+    const arr =
+      matchKey === "matches" ? tournament.matches : tournament.qualifyingMatches ?? [];
+    const match = arr.find((m) => m.id === matchId);
+    if (!match || !match.series) return;
+    const game = match.series.find((g) => g.id === gameId);
+    if (!game) return;
+    const loserCarId =
+      winnerCarId === game.carAId ? game.carBId : game.carAId;
+
+    const aRoster = teams.find((tm) => tm.id === match.teamAId)?.carIds ?? [];
+    const bRoster = teams.find((tm) => tm.id === match.teamBId)?.carIds ?? [];
+    let aw = 0;
+    let bw = 0;
+    match.series.forEach((g) => {
+      const w = g.id === gameId ? winnerCarId : g.winnerCarId;
+      if (!w) return;
+      if (aRoster.includes(w)) aw++;
+      else if (bRoster.includes(w)) bw++;
+    });
+    const needed = Math.floor((match.seriesLength ?? match.series.length) / 2) + 1;
+    let teamWinnerId: string | null = null;
+    if (!match.winnerId) {
+      if (aw >= needed) teamWinnerId = match.teamAId ?? null;
+      else if (bw >= needed) teamWinnerId = match.teamBId ?? null;
+    }
+    const teamLoserId = teamWinnerId
+      ? (teamWinnerId === match.teamAId ? match.teamBId : match.teamAId) ?? null
+      : null;
+
+    setTournaments((prev) =>
+      prev.map((x) => {
+        if (x.id !== tournament.id) return x;
+        const list = (matchKey === "matches" ? x.matches : x.qualifyingMatches) ?? [];
+        const newList = list.map((m) =>
+          m.id === matchId && m.series
+            ? {
+                ...m,
+                series: m.series.map((g) =>
+                  g.id === gameId ? { ...g, winnerCarId } : g,
+                ),
+              }
+            : m,
+        );
+        let updated: Tournament =
+          matchKey === "matches"
+            ? { ...x, matches: newList }
+            : { ...x, qualifyingMatches: newList };
+        if (teamWinnerId) {
+          if (matchKey === "matches") {
+            updated = applyWinner(updated, matchId, teamWinnerId);
+          } else {
+            updated = {
+              ...updated,
+              qualifyingMatches: (updated.qualifyingMatches ?? []).map((m) =>
+                m.id === matchId ? { ...m, winnerId: teamWinnerId } : m,
+              ),
+            };
+          }
+        }
+        return updated;
+      }),
+    );
+
+    setCars((prev) =>
+      prev.map((c) => {
+        if (c.id === winnerCarId) return { ...c, wins: (c.wins ?? 0) + 1 };
+        if (loserCarId && c.id === loserCarId)
+          return { ...c, losses: (c.losses ?? 0) + 1 };
+        return c;
+      }),
+    );
+    if (teamWinnerId) {
+      setTeams((prev) =>
+        prev.map((tm) => {
+          if (tm.id === teamWinnerId) return { ...tm, wins: (tm.wins ?? 0) + 1 };
+          if (teamLoserId && tm.id === teamLoserId)
+            return { ...tm, losses: (tm.losses ?? 0) + 1 };
+          return tm;
+        }),
+      );
+    }
+  }
+
   function reset() {
     // Calculate losses and wins to decrement based on current matches
     const toDecrement = new Map<string, { wins: number; losses: number }>();
