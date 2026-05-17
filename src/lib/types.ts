@@ -43,6 +43,16 @@ export interface Match {
   winnerType?: "car" | "team" | null;
   // round-robin only
   isGroup?: boolean;
+  // full-team mode (team tournaments): each team-vs-team match is a series of car-vs-car games
+  series?: SeriesGame[];
+  seriesLength?: number;
+}
+
+export interface SeriesGame {
+  id: string;
+  carAId: string | null;
+  carBId: string | null;
+  winnerCarId: string | null;
 }
 
 export interface Tournament {
@@ -56,6 +66,9 @@ export interface Tournament {
   createdAt: number;
   champion?: string | null;
   championType?: "car" | "team" | null;
+  // full-team mode for team tournaments
+  fullTeamMode?: boolean;
+  seriesLength?: number;
   // time-trial only
   trackLength?: number;
   trackUnit?: TrackUnit;

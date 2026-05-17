@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -5,7 +6,10 @@ import { useTheme } from "@/components/ThemeProvider";
 
 export function ThemeToggle() {
   const { resolvedTheme, toggleTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const isDark = mounted && resolvedTheme === "dark";
+  const label = mounted ? (isDark ? "Switch to light mode" : "Switch to dark mode") : "Toggle theme";
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -16,14 +20,17 @@ export function ThemeToggle() {
             variant="outline"
             size="icon"
             onClick={toggleTheme}
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={label}
             className="border-border/70 bg-background/80 backdrop-blur"
+            suppressHydrationWarning
           >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <span suppressHydrationWarning>
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          {isDark ? "Switch to light mode" : "Switch to dark mode"}
+          {label}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

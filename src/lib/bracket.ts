@@ -1,4 +1,4 @@
-import type { Car, Match, Tournament, BracketFormat, Team } from "./types";
+import type { Car, Match, Tournament, BracketFormat, Team, SeriesGame } from "./types";
 import { uid } from "./storage";
 
 function shuffle<T>(arr: T[]): T[] {
@@ -16,12 +16,29 @@ function nextPow2(n: number) {
   return p;
 }
 
-export function buildMatches(format: BracketFormat, participantIds: string[], participationType: "cars" | "teams" = "cars"): Match[] {
+function makeSeries(n: number): SeriesGame[] {
+  return Array.from({ length: n }, () => ({
+    id: uid(),
+    carAId: null,
+    carBId: null,
+    winnerCarId: null,
+  }));
+}
+
+export function buildMatches(
+  format: BracketFormat,
+  participantIds: string[],
+  participationType: "cars" | "teams" = "cars",
+  opts: { seriesLength?: number } = {},
+): Match[] {
   if (format === "time-trial") return [];
   if (format === "championship") return [];
   if (participantIds.length < 2) return [];
   const ids = shuffle(participantIds);
   const isTeams = participationType === "teams";
+  const seriesLength = isTeams && opts.seriesLength && opts.seriesLength > 0 ? opts.seriesLength : 0;
+  const attachSeries = () =>
+    seriesLength > 0 ? { series: makeSeries(seriesLength), seriesLength } : {};
 
   if (format === "round-robin") {
     const matches: Match[] = [];
@@ -35,6 +52,7 @@ export function buildMatches(format: BracketFormat, participantIds: string[], pa
           isGroup: true,
           ...(isTeams ? { teamAId: ids[i], teamBId: ids[j] } : { carAId: ids[i], carBId: ids[j] }),
           winnerId: null,
+          ...attachSeries(),
         });
       }
     }
@@ -63,6 +81,7 @@ export function buildMatches(format: BracketFormat, participantIds: string[], pa
       ...(isTeams 
         ? { teamAId: a, teamBId: b } 
         : { carAId: a, carBId: b }),
+      ...attachSeries(),
     });
   }
   // subsequent winners-rounds (empty placeholders)
@@ -82,6 +101,7 @@ export function buildMatches(format: BracketFormat, participantIds: string[], pa
         ...(isTeams 
           ? { teamAId: null, teamBId: null } 
           : { carAId: null, carBId: null }),
+        ...attachSeries(),
       });
     }
     prev = prev / 2;
@@ -104,6 +124,7 @@ export function buildMatches(format: BracketFormat, participantIds: string[], pa
         ...(isTeams 
           ? { teamAId: null, teamBId: null } 
           : { carAId: null, carBId: null }),
+        ...attachSeries(),
       });
     }
     // grand final
@@ -119,6 +140,7 @@ export function buildMatches(format: BracketFormat, participantIds: string[], pa
       ...(isTeams 
         ? { teamAId: null, teamBId: null } 
         : { carAId: null, carBId: null }),
+      ...attachSeries(),
     });
   }
 
@@ -282,12 +304,15 @@ export function buildSeededBracket(
   format: "single" | "double",
   rankedIds: string[],
   isTeams: boolean,
+  seriesLength: number = 0,
 ): Match[] {
   const size = nextPow2Down(rankedIds.length);
   if (size < 2) return [];
   const top = rankedIds.slice(0, size);
   const order = bracketOrder(size); // 1-indexed seed numbers in round-1 slot order
   const seeded: string[] = order.map((s) => top[s - 1]);
+  const attachSeries = () =>
+    isTeams && seriesLength > 0 ? { series: makeSeries(seriesLength), seriesLength } : {};
 
   const matches: Match[] = [];
   // round 1
@@ -301,6 +326,7 @@ export function buildSeededBracket(
       bracket: format === "double" ? "winners" : undefined,
       winnerId: null,
       ...(isTeams ? { teamAId: a, teamBId: b } : { carAId: a, carBId: b }),
+      ...attachSeries(),
     });
   }
   let prev = size / 2;
@@ -314,6 +340,7 @@ export function buildSeededBracket(
         bracket: format === "double" ? "winners" : undefined,
         winnerId: null,
         ...(isTeams ? { teamAId: null, teamBId: null } : { carAId: null, carBId: null }),
+        ...attachSeries(),
       });
     }
     prev = prev / 2;
@@ -330,6 +357,7 @@ export function buildSeededBracket(
         bracket: "losers",
         winnerId: null,
         ...(isTeams ? { teamAId: null, teamBId: null } : { carAId: null, carBId: null }),
+        ...attachSeries(),
       });
     }
     matches.push({
@@ -339,6 +367,7 @@ export function buildSeededBracket(
       bracket: "final",
       winnerId: null,
       ...(isTeams ? { teamAId: null, teamBId: null } : { carAId: null, carBId: null }),
+      ...attachSeries(),
     });
   }
 
@@ -399,7 +428,8 @@ export function buildQualifyingMatches(
   qualifyingType: "time-trial" | "round-robin",
   participantIds: string[],
   participationType: "cars" | "teams",
+  seriesLength: number = 0,
 ): Match[] {
   if (qualifyingType === "time-trial") return [];
-  return buildMatches("round-robin", participantIds, participationType);
+  return buildMatches("round-robin", participantIds, participationType, { seriesLength });
 }

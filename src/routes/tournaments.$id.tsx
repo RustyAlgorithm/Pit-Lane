@@ -161,6 +161,9 @@ function TournamentDetail() {
         const matches = x.matches.map((m) => ({
           ...m,
           winnerId: null,
+          series: m.series
+            ? m.series.map((g) => ({ ...g, carAId: null, carBId: null, winnerCarId: null }))
+            : m.series,
           ...(isTeams ? { teamAId: m.teamAId, teamBId: m.teamBId } : { carAId: m.carAId, carBId: m.carBId }),
         }));
         return { ...x, champion: null, championType: null, matches, previousSeasons: newPreviousSeasons };
@@ -230,6 +233,125 @@ function TournamentDetail() {
     }
   }
 
+  function selectSeriesCar(
+    matchKey: "matches" | "qualifyingMatches",
+    matchId: string,
+    gameId: string,
+    side: "A" | "B",
+    carId: string | null,
+  ) {
+    setTournaments((prev) =>
+      prev.map((x) => {
+        if (x.id !== tournament.id) return x;
+        const list = (matchKey === "matches" ? x.matches : x.qualifyingMatches) ?? [];
+        const newList = list.map((m) =>
+          m.id === matchId && m.series
+            ? {
+                ...m,
+                series: m.series.map((g) =>
+                  g.id === gameId
+                    ? { ...g, [side === "A" ? "carAId" : "carBId"]: carId }
+                    : g,
+                ),
+              }
+            : m,
+        );
+        return matchKey === "matches"
+          ? { ...x, matches: newList }
+          : { ...x, qualifyingMatches: newList };
+      }),
+    );
+  }
+
+  function pickSeriesGameWinner(
+    matchKey: "matches" | "qualifyingMatches",
+    matchId: string,
+    gameId: string,
+    winnerCarId: string,
+  ) {
+    const arr =
+      matchKey === "matches" ? tournament.matches : tournament.qualifyingMatches ?? [];
+    const match = arr.find((m) => m.id === matchId);
+    if (!match || !match.series) return;
+    const game = match.series.find((g) => g.id === gameId);
+    if (!game) return;
+    const loserCarId =
+      winnerCarId === game.carAId ? game.carBId : game.carAId;
+
+    const aRoster = teams.find((tm) => tm.id === match.teamAId)?.carIds ?? [];
+    const bRoster = teams.find((tm) => tm.id === match.teamBId)?.carIds ?? [];
+    let aw = 0;
+    let bw = 0;
+    match.series.forEach((g) => {
+      const w = g.id === gameId ? winnerCarId : g.winnerCarId;
+      if (!w) return;
+      if (aRoster.includes(w)) aw++;
+      else if (bRoster.includes(w)) bw++;
+    });
+    const needed = Math.floor((match.seriesLength ?? match.series.length) / 2) + 1;
+    let teamWinnerId: string | null = null;
+    if (!match.winnerId) {
+      if (aw >= needed) teamWinnerId = match.teamAId ?? null;
+      else if (bw >= needed) teamWinnerId = match.teamBId ?? null;
+    }
+    const teamLoserId = teamWinnerId
+      ? (teamWinnerId === match.teamAId ? match.teamBId : match.teamAId) ?? null
+      : null;
+
+    setTournaments((prev) =>
+      prev.map((x) => {
+        if (x.id !== tournament.id) return x;
+        const list = (matchKey === "matches" ? x.matches : x.qualifyingMatches) ?? [];
+        const newList = list.map((m) =>
+          m.id === matchId && m.series
+            ? {
+                ...m,
+                series: m.series.map((g) =>
+                  g.id === gameId ? { ...g, winnerCarId } : g,
+                ),
+              }
+            : m,
+        );
+        let updated: Tournament =
+          matchKey === "matches"
+            ? { ...x, matches: newList }
+            : { ...x, qualifyingMatches: newList };
+        if (teamWinnerId) {
+          if (matchKey === "matches") {
+            updated = applyWinner(updated, matchId, teamWinnerId);
+          } else {
+            updated = {
+              ...updated,
+              qualifyingMatches: (updated.qualifyingMatches ?? []).map((m) =>
+                m.id === matchId ? { ...m, winnerId: teamWinnerId } : m,
+              ),
+            };
+          }
+        }
+        return updated;
+      }),
+    );
+
+    setCars((prev) =>
+      prev.map((c) => {
+        if (c.id === winnerCarId) return { ...c, wins: (c.wins ?? 0) + 1 };
+        if (loserCarId && c.id === loserCarId)
+          return { ...c, losses: (c.losses ?? 0) + 1 };
+        return c;
+      }),
+    );
+    if (teamWinnerId) {
+      setTeams((prev) =>
+        prev.map((tm) => {
+          if (tm.id === teamWinnerId) return { ...tm, wins: (tm.wins ?? 0) + 1 };
+          if (teamLoserId && tm.id === teamLoserId)
+            return { ...tm, losses: (tm.losses ?? 0) + 1 };
+          return tm;
+        }),
+      );
+    }
+  }
+
   function reset() {
     // Calculate losses and wins to decrement based on current matches
     const toDecrement = new Map<string, { wins: number; losses: number }>();
@@ -259,13 +381,25 @@ function TournamentDetail() {
         if (x.id !== tournament.id) return x;
         const isTeams = x.participationType === "teams";
         const matches = x.matches.map((m) => {
-          if (x.format === "round-robin") return { ...m, winnerId: null };
+          if (x.format === "round-robin") {
+            return {
+              ...m,
+              winnerId: null,
+              series: m.series
+                ? m.series.map((g) => ({ ...g, carAId: null, carBId: null, winnerCarId: null }))
+                : m.series,
+            };
+          }
           // elimination: keep only round-1 winners-bracket pairings
           const isRound1Winners = m.round === 1 && (m.bracket === undefined || m.bracket === "winners");
+          const clearedSeries = m.series
+            ? m.series.map((g) => ({ ...g, carAId: null, carBId: null, winnerCarId: null }))
+            : m.series;
           if (isTeams) {
             return {
               ...m,
               winnerId: null,
+              series: clearedSeries,
               teamAId: isRound1Winners ? m.teamAId : null,
               teamBId: isRound1Winners ? m.teamBId : null,
             };
@@ -273,6 +407,7 @@ function TournamentDetail() {
             return {
               ...m,
               winnerId: null,
+              series: clearedSeries,
               carAId: isRound1Winners ? m.carAId : null,
               carBId: isRound1Winners ? m.carBId : null,
             };
@@ -348,7 +483,18 @@ function TournamentDetail() {
       </div>
 
       {tournament.format === "round-robin" ? (
-        <RoundRobin t={tournament} cars={cars} teams={teams} onPick={pickWinner} />
+        <RoundRobin
+          t={tournament}
+          cars={cars}
+          teams={teams}
+          onPick={pickWinner}
+          onSelectSeriesCar={(mId, gId, side, cId) =>
+            selectSeriesCar("matches", mId, gId, side, cId)
+          }
+          onPickSeriesGame={(mId, gId, cId) =>
+            pickSeriesGameWinner("matches", mId, gId, cId)
+          }
+        />
       ) : tournament.format === "time-trial" ? (
         <TimeTrialView
           t={tournament}
@@ -371,7 +517,19 @@ function TournamentDetail() {
           }
         />
       ) : (
-        <Bracket t={tournament} carById={carById} teamById={teamById} onPick={pickWinner} />
+        <Bracket
+          t={tournament}
+          cars={cars}
+          carById={carById}
+          teamById={teamById}
+          onPick={pickWinner}
+          onSelectSeriesCar={(mId, gId, side, cId) =>
+            selectSeriesCar("matches", mId, gId, side, cId)
+          }
+          onPickSeriesGame={(mId, gId, cId) =>
+            pickSeriesGameWinner("matches", mId, gId, cId)
+          }
+        />
       )}
 
       <div className="mt-10 flex justify-end gap-2">
@@ -579,6 +737,136 @@ function TimeTrialView({
         </Card>
       </div>
     </div>
+  );
+}
+
+function SeriesMatchCell({
+  match,
+  teamA,
+  teamB,
+  cars,
+  onSelectCar,
+  onPickWinner,
+  label,
+}: {
+  match: import("@/lib/types").Match;
+  teamA?: Team;
+  teamB?: Team;
+  cars: Car[];
+  onSelectCar: (gameId: string, side: "A" | "B", carId: string | null) => void;
+  onPickWinner: (gameId: string, winnerCarId: string) => void;
+  label?: string;
+}) {
+  const aRoster = (teamA?.carIds ?? [])
+    .map((id) => cars.find((c) => c.id === id))
+    .filter((c): c is Car => !!c);
+  const bRoster = (teamB?.carIds ?? [])
+    .map((id) => cars.find((c) => c.id === id))
+    .filter((c): c is Car => !!c);
+  const series = match.series ?? [];
+  const matchDone = !!match.winnerId;
+  const winnerName =
+    match.winnerId === teamA?.id
+      ? teamA?.name
+      : match.winnerId === teamB?.id
+        ? teamB?.name
+        : null;
+  return (
+    <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
+      {label && (
+        <div className="border-b border-border bg-secondary/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm font-semibold">
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          {teamA && (
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: teamA.color }} />
+          )}
+          <span className="truncate">{teamA?.name ?? "TBD"}</span>
+        </span>
+        <span className="text-[10px] uppercase text-muted-foreground">vs</span>
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          <span className="truncate">{teamB?.name ?? "TBD"}</span>
+          {teamB && (
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: teamB.color }} />
+          )}
+        </span>
+      </div>
+      {winnerName && (
+        <div className="flex items-center gap-1.5 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+          <Trophy className="h-3 w-3" /> Series winner: {winnerName}
+        </div>
+      )}
+      <div className="space-y-2 p-2">
+        {series.map((g, i) => {
+          const winnerA = g.winnerCarId && g.carAId === g.winnerCarId;
+          const winnerB = g.winnerCarId && g.carBId === g.winnerCarId;
+          const aName = cars.find((c) => c.id === g.carAId)?.name;
+          const bName = cars.find((c) => c.id === g.carBId)?.name;
+          return (
+            <div key={g.id} className="rounded border border-border bg-secondary/30 p-2">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Race {i + 1}
+              </div>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+                <select
+                  disabled={!teamA || !!g.winnerCarId || matchDone}
+                  className="h-8 min-w-0 rounded border border-input bg-transparent px-2 text-xs disabled:opacity-60"
+                  value={g.carAId ?? ""}
+                  onChange={(e) => onSelectCar(g.id, "A", e.target.value || null)}
+                >
+                  <option value="">Pick car…</option>
+                  {aRoster.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[10px] text-muted-foreground">vs</span>
+                <select
+                  disabled={!teamB || !!g.winnerCarId || matchDone}
+                  className="h-8 min-w-0 rounded border border-input bg-transparent px-2 text-xs disabled:opacity-60"
+                  value={g.carBId ?? ""}
+                  onChange={(e) => onSelectCar(g.id, "B", e.target.value || null)}
+                >
+                  <option value="">Pick car…</option>
+                  {bRoster.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-1.5 flex gap-1">
+                <Button
+                  size="sm"
+                  variant={winnerA ? "default" : "outline"}
+                  disabled={!g.carAId || !g.carBId || !!g.winnerCarId || matchDone}
+                  onClick={() => g.carAId && onPickWinner(g.id, g.carAId)}
+                  className="h-7 flex-1 truncate text-xs"
+                  title={aName}
+                >
+                  {winnerA && <Trophy className="mr-1 h-3 w-3" />}
+                  {aName ?? "A"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={winnerB ? "default" : "outline"}
+                  disabled={!g.carAId || !g.carBId || !!g.winnerCarId || matchDone}
+                  onClick={() => g.carBId && onPickWinner(g.id, g.carBId)}
+                  className="h-7 flex-1 truncate text-xs"
+                  title={bName}
+                >
+                  {winnerB && <Trophy className="mr-1 h-3 w-3" />}
+                  {bName ?? "B"}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
@@ -797,39 +1085,55 @@ function MatchCell({
 }
 
 function Bracket({
-  t, carById, teamById, onPick,
+  t, cars, carById, teamById, onPick, onSelectSeriesCar, onPickSeriesGame,
 }: {
   t: Tournament;
+  cars?: Car[];
   carById: (id?: string | null) => Car | undefined;
   teamById?: (id?: string | null) => Team | undefined;
   onPick: (matchId: string, winnerId: string) => void;
+  onSelectSeriesCar?: (matchId: string, gameId: string, side: "A" | "B", carId: string | null) => void;
+  onPickSeriesGame?: (matchId: string, gameId: string, winnerCarId: string) => void;
 }) {
   const isDouble = t.format === "double";
   const isTeams = t.participationType === "teams";
+  const useSeries = !!t.fullTeamMode && isTeams && !!onSelectSeriesCar && !!onPickSeriesGame;
+  const renderMatch = (m: typeof t.matches[number]) =>
+    useSeries && m.series ? (
+      <SeriesMatchCell
+        key={m.id}
+        match={m}
+        teamA={teamById?.(m.teamAId)}
+        teamB={teamById?.(m.teamBId)}
+        cars={cars ?? []}
+        onSelectCar={(gid, side, cid) => onSelectSeriesCar!(m.id, gid, side, cid)}
+        onPickWinner={(gid, cid) => onPickSeriesGame!(m.id, gid, cid)}
+      />
+    ) : (
+      <MatchCell
+        key={m.id}
+        carA={isTeams ? undefined : carById(m.carAId)}
+        carB={isTeams ? undefined : carById(m.carBId)}
+        teamA={isTeams ? teamById?.(m.teamAId) : undefined}
+        teamB={isTeams ? teamById?.(m.teamBId) : undefined}
+        winnerId={m.winnerId}
+        onPick={(id) => onPick(m.id, id)}
+      />
+    );
 
   if (!isDouble) {
     const rounds = [...new Set(t.matches.map((m) => m.round))].sort((a, b) => a - b);
     return (
       <div className="mt-8 overflow-x-auto">
-        <div className="flex gap-6 pb-2">
+        <div className={`flex gap-6 pb-2 ${useSeries ? "min-w-full" : ""}`}>
           {rounds.map((r) => {
             const ms = t.matches.filter((m) => m.round === r).sort((a, b) => a.slot - b.slot);
             return (
-              <div key={r} className="flex min-w-[220px] flex-col justify-around gap-4">
+              <div key={r} className={`flex flex-col justify-around gap-4 ${useSeries ? "min-w-[300px]" : "min-w-[220px]"}`}>
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {r === rounds.length ? "Final" : r === rounds.length - 1 ? "Semifinal" : `Round ${r}`}
                 </div>
-                {ms.map((m) => (
-                  <MatchCell
-                    key={m.id}
-                    carA={isTeams ? undefined : carById(m.carAId)}
-                    carB={isTeams ? undefined : carById(m.carBId)}
-                    teamA={isTeams ? teamById?.(m.teamAId) : undefined}
-                    teamB={isTeams ? teamById?.(m.teamBId) : undefined}
-                    winnerId={m.winnerId}
-                    onPick={(id) => onPick(m.id, id)}
-                  />
-                ))}
+                {ms.map((m) => renderMatch(m))}
               </div>
             );
           })}
@@ -846,19 +1150,9 @@ function Bracket({
   const lRounds = [...new Set(losers.map((m) => m.round))].sort((a, b) => a - b);
 
   const Column = ({ title, matches }: { title: string; matches: typeof t.matches }) => (
-    <div className="flex min-w-[220px] flex-col gap-3">
+    <div className={`flex flex-col gap-3 ${useSeries ? "min-w-[300px]" : "min-w-[220px]"}`}>
       <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</div>
-      {matches.map((m) => (
-        <MatchCell 
-          key={m.id} 
-          carA={isTeams ? undefined : carById(m.carAId)} 
-          carB={isTeams ? undefined : carById(m.carBId)}
-          teamA={isTeams ? teamById?.(m.teamAId) : undefined}
-          teamB={isTeams ? teamById?.(m.teamBId) : undefined}
-          winnerId={m.winnerId} 
-          onPick={(id) => onPick(m.id, id)} 
-        />
-      ))}
+      {matches.map((m) => renderMatch(m))}
     </div>
   );
 
@@ -890,29 +1184,52 @@ function Bracket({
   );
 }
 
-function RoundRobin({ t, cars, teams, onPick }: { t: Tournament; cars: Car[]; teams: Team[]; onPick: (matchId: string, winnerId: string) => void }) {
+function RoundRobin({
+  t, cars, teams, onPick, onSelectSeriesCar, onPickSeriesGame,
+}: {
+  t: Tournament;
+  cars: Car[];
+  teams: Team[];
+  onPick: (matchId: string, winnerId: string) => void;
+  onSelectSeriesCar?: (matchId: string, gameId: string, side: "A" | "B", carId: string | null) => void;
+  onPickSeriesGame?: (matchId: string, gameId: string, winnerCarId: string) => void;
+}) {
   const standings = standingsFor(t, cars, teams);
   const isTeams = t.participationType === "teams";
   const carById = (id?: string | null) => (id ? cars.find((c) => c.id === id) : undefined);
   const teamById = (id?: string | null) => (id ? teams.find((tm) => tm.id === id) : undefined);
+  const useSeries = !!t.fullTeamMode && isTeams && !!onSelectSeriesCar && !!onPickSeriesGame;
 
   return (
     <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_320px]">
       <div>
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">Match-ups</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {t.matches.map((m, i) => (
-            <MatchCell
-              key={m.id}
-              label={`Match ${i + 1}`}
-              carA={isTeams ? undefined : carById(m.carAId)}
-              carB={isTeams ? undefined : carById(m.carBId)}
-              teamA={isTeams ? teamById(m.teamAId) : undefined}
-              teamB={isTeams ? teamById(m.teamBId) : undefined}
-              winnerId={m.winnerId}
-              onPick={(id) => onPick(m.id, id)}
-            />
-          ))}
+          {t.matches.map((m, i) =>
+            useSeries && m.series ? (
+              <SeriesMatchCell
+                key={m.id}
+                label={`Match ${i + 1}`}
+                match={m}
+                teamA={teamById(m.teamAId)}
+                teamB={teamById(m.teamBId)}
+                cars={cars}
+                onSelectCar={(gid, side, cid) => onSelectSeriesCar!(m.id, gid, side, cid)}
+                onPickWinner={(gid, cid) => onPickSeriesGame!(m.id, gid, cid)}
+              />
+            ) : (
+              <MatchCell
+                key={m.id}
+                label={`Match ${i + 1}`}
+                carA={isTeams ? undefined : carById(m.carAId)}
+                carB={isTeams ? undefined : carById(m.carBId)}
+                teamA={isTeams ? teamById(m.teamAId) : undefined}
+                teamB={isTeams ? teamById(m.teamBId) : undefined}
+                winnerId={m.winnerId}
+                onPick={(id) => onPick(m.id, id)}
+              />
+            ),
+          )}
         </div>
       </div>
       <div>
