@@ -57,8 +57,7 @@ function TournamentsPage() {
     if (!name.trim()) return toast.error("Tournament name required");
     const fullTeamEligible =
       participationType === "teams" &&
-      (format === "single" || format === "double" || format === "round-robin" ||
-        (format === "championship" && qualifyingType === "round-robin"));
+      (format === "single" || format === "double" || format === "round-robin");
     const useFullTeam = fullTeamEligible && fullTeamMode;
     let seriesLength = 0;
     if (useFullTeam) {
@@ -364,8 +363,7 @@ function TournamentsPage() {
               </div>
 
               {participationType === "teams" &&
-                (format === "single" || format === "double" || format === "round-robin" ||
-                  (format === "championship" && qualifyingType === "round-robin")) && (
+                (format === "single" || format === "double" || format === "round-robin") && (
                   <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-3">
                     <Checkbox
                       id="fullteam"
