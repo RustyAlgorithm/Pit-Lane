@@ -939,39 +939,55 @@ function MatchCell({
 }
 
 function Bracket({
-  t, carById, teamById, onPick,
+  t, cars, carById, teamById, onPick, onSelectSeriesCar, onPickSeriesGame,
 }: {
   t: Tournament;
+  cars?: Car[];
   carById: (id?: string | null) => Car | undefined;
   teamById?: (id?: string | null) => Team | undefined;
   onPick: (matchId: string, winnerId: string) => void;
+  onSelectSeriesCar?: (matchId: string, gameId: string, side: "A" | "B", carId: string | null) => void;
+  onPickSeriesGame?: (matchId: string, gameId: string, winnerCarId: string) => void;
 }) {
   const isDouble = t.format === "double";
   const isTeams = t.participationType === "teams";
+  const useSeries = !!t.fullTeamMode && isTeams && !!onSelectSeriesCar && !!onPickSeriesGame;
+  const renderMatch = (m: typeof t.matches[number]) =>
+    useSeries && m.series ? (
+      <SeriesMatchCell
+        key={m.id}
+        match={m}
+        teamA={teamById?.(m.teamAId)}
+        teamB={teamById?.(m.teamBId)}
+        cars={cars ?? []}
+        onSelectCar={(gid, side, cid) => onSelectSeriesCar!(m.id, gid, side, cid)}
+        onPickWinner={(gid, cid) => onPickSeriesGame!(m.id, gid, cid)}
+      />
+    ) : (
+      <MatchCell
+        key={m.id}
+        carA={isTeams ? undefined : carById(m.carAId)}
+        carB={isTeams ? undefined : carById(m.carBId)}
+        teamA={isTeams ? teamById?.(m.teamAId) : undefined}
+        teamB={isTeams ? teamById?.(m.teamBId) : undefined}
+        winnerId={m.winnerId}
+        onPick={(id) => onPick(m.id, id)}
+      />
+    );
 
   if (!isDouble) {
     const rounds = [...new Set(t.matches.map((m) => m.round))].sort((a, b) => a - b);
     return (
       <div className="mt-8 overflow-x-auto">
-        <div className="flex gap-6 pb-2">
+        <div className={`flex gap-6 pb-2 ${useSeries ? "min-w-full" : ""}`}>
           {rounds.map((r) => {
             const ms = t.matches.filter((m) => m.round === r).sort((a, b) => a.slot - b.slot);
             return (
-              <div key={r} className="flex min-w-[220px] flex-col justify-around gap-4">
+              <div key={r} className={`flex flex-col justify-around gap-4 ${useSeries ? "min-w-[300px]" : "min-w-[220px]"}`}>
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {r === rounds.length ? "Final" : r === rounds.length - 1 ? "Semifinal" : `Round ${r}`}
                 </div>
-                {ms.map((m) => (
-                  <MatchCell
-                    key={m.id}
-                    carA={isTeams ? undefined : carById(m.carAId)}
-                    carB={isTeams ? undefined : carById(m.carBId)}
-                    teamA={isTeams ? teamById?.(m.teamAId) : undefined}
-                    teamB={isTeams ? teamById?.(m.teamBId) : undefined}
-                    winnerId={m.winnerId}
-                    onPick={(id) => onPick(m.id, id)}
-                  />
-                ))}
+                {ms.map((m) => renderMatch(m))}
               </div>
             );
           })}
@@ -988,19 +1004,9 @@ function Bracket({
   const lRounds = [...new Set(losers.map((m) => m.round))].sort((a, b) => a - b);
 
   const Column = ({ title, matches }: { title: string; matches: typeof t.matches }) => (
-    <div className="flex min-w-[220px] flex-col gap-3">
+    <div className={`flex flex-col gap-3 ${useSeries ? "min-w-[300px]" : "min-w-[220px]"}`}>
       <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</div>
-      {matches.map((m) => (
-        <MatchCell 
-          key={m.id} 
-          carA={isTeams ? undefined : carById(m.carAId)} 
-          carB={isTeams ? undefined : carById(m.carBId)}
-          teamA={isTeams ? teamById?.(m.teamAId) : undefined}
-          teamB={isTeams ? teamById?.(m.teamBId) : undefined}
-          winnerId={m.winnerId} 
-          onPick={(id) => onPick(m.id, id)} 
-        />
-      ))}
+      {matches.map((m) => renderMatch(m))}
     </div>
   );
 
@@ -1032,29 +1038,52 @@ function Bracket({
   );
 }
 
-function RoundRobin({ t, cars, teams, onPick }: { t: Tournament; cars: Car[]; teams: Team[]; onPick: (matchId: string, winnerId: string) => void }) {
+function RoundRobin({
+  t, cars, teams, onPick, onSelectSeriesCar, onPickSeriesGame,
+}: {
+  t: Tournament;
+  cars: Car[];
+  teams: Team[];
+  onPick: (matchId: string, winnerId: string) => void;
+  onSelectSeriesCar?: (matchId: string, gameId: string, side: "A" | "B", carId: string | null) => void;
+  onPickSeriesGame?: (matchId: string, gameId: string, winnerCarId: string) => void;
+}) {
   const standings = standingsFor(t, cars, teams);
   const isTeams = t.participationType === "teams";
   const carById = (id?: string | null) => (id ? cars.find((c) => c.id === id) : undefined);
   const teamById = (id?: string | null) => (id ? teams.find((tm) => tm.id === id) : undefined);
+  const useSeries = !!t.fullTeamMode && isTeams && !!onSelectSeriesCar && !!onPickSeriesGame;
 
   return (
     <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_320px]">
       <div>
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">Match-ups</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {t.matches.map((m, i) => (
-            <MatchCell
-              key={m.id}
-              label={`Match ${i + 1}`}
-              carA={isTeams ? undefined : carById(m.carAId)}
-              carB={isTeams ? undefined : carById(m.carBId)}
-              teamA={isTeams ? teamById(m.teamAId) : undefined}
-              teamB={isTeams ? teamById(m.teamBId) : undefined}
-              winnerId={m.winnerId}
-              onPick={(id) => onPick(m.id, id)}
-            />
-          ))}
+          {t.matches.map((m, i) =>
+            useSeries && m.series ? (
+              <SeriesMatchCell
+                key={m.id}
+                label={`Match ${i + 1}`}
+                match={m}
+                teamA={teamById(m.teamAId)}
+                teamB={teamById(m.teamBId)}
+                cars={cars}
+                onSelectCar={(gid, side, cid) => onSelectSeriesCar!(m.id, gid, side, cid)}
+                onPickWinner={(gid, cid) => onPickSeriesGame!(m.id, gid, cid)}
+              />
+            ) : (
+              <MatchCell
+                key={m.id}
+                label={`Match ${i + 1}`}
+                carA={isTeams ? undefined : carById(m.carAId)}
+                carB={isTeams ? undefined : carById(m.carBId)}
+                teamA={isTeams ? teamById(m.teamAId) : undefined}
+                teamB={isTeams ? teamById(m.teamBId) : undefined}
+                winnerId={m.winnerId}
+                onPick={(id) => onPick(m.id, id)}
+              />
+            ),
+          )}
         </div>
       </div>
       <div>
