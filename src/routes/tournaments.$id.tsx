@@ -9,7 +9,15 @@ import { TournamentCertificateDialog } from "@/components/TournamentCertificateD
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download } from "lucide-react";
+import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download, Dices } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/tournaments/$id")({
   component: TournamentDetail,
@@ -352,6 +360,57 @@ function TournamentDetail() {
     }
   }
 
+  function pickTiebreakerWinner(
+    matchKey: "matches" | "qualifyingMatches",
+    matchId: string,
+    teamWinnerId: string,
+    winnerCarId: string,
+    loserCarId: string | null,
+  ) {
+    const arr =
+      matchKey === "matches" ? tournament.matches : tournament.qualifyingMatches ?? [];
+    const match = arr.find((m) => m.id === matchId);
+    if (!match) return;
+    const teamLoserId =
+      teamWinnerId === match.teamAId ? match.teamBId ?? null : match.teamAId ?? null;
+
+    setTournaments((prev) =>
+      prev.map((x) => {
+        if (x.id !== tournament.id) return x;
+        let updated: Tournament = x;
+        if (matchKey === "matches") {
+          updated = applyWinner(updated, matchId, teamWinnerId);
+        } else {
+          updated = {
+            ...updated,
+            qualifyingMatches: (updated.qualifyingMatches ?? []).map((m) =>
+              m.id === matchId ? { ...m, winnerId: teamWinnerId } : m,
+            ),
+          };
+        }
+        return updated;
+      }),
+    );
+
+    setCars((prev) =>
+      prev.map((c) => {
+        if (c.id === winnerCarId) return { ...c, wins: (c.wins ?? 0) + 1 };
+        if (loserCarId && c.id === loserCarId)
+          return { ...c, losses: (c.losses ?? 0) + 1 };
+        return c;
+      }),
+    );
+    setTeams((prev) =>
+      prev.map((tm) => {
+        if (tm.id === teamWinnerId) return { ...tm, wins: (tm.wins ?? 0) + 1 };
+        if (teamLoserId && tm.id === teamLoserId)
+          return { ...tm, losses: (tm.losses ?? 0) + 1 };
+        return tm;
+      }),
+    );
+    toast.success("Tiebreaker resolved!");
+  }
+
   function reset() {
     // Calculate losses and wins to decrement based on current matches
     const toDecrement = new Map<string, { wins: number; losses: number }>();
@@ -494,6 +553,9 @@ function TournamentDetail() {
           onPickSeriesGame={(mId, gId, cId) =>
             pickSeriesGameWinner("matches", mId, gId, cId)
           }
+          onTiebreaker={(mId, teamW, carW, carL) =>
+            pickTiebreakerWinner("matches", mId, teamW, carW, carL)
+          }
         />
       ) : tournament.format === "time-trial" ? (
         <TimeTrialView
@@ -528,6 +590,9 @@ function TournamentDetail() {
           }
           onPickSeriesGame={(mId, gId, cId) =>
             pickSeriesGameWinner("matches", mId, gId, cId)
+          }
+          onTiebreaker={(mId, teamW, carW, carL) =>
+            pickTiebreakerWinner("matches", mId, teamW, carW, carL)
           }
         />
       )}
@@ -747,6 +812,7 @@ function SeriesMatchCell({
   cars,
   onSelectCar,
   onPickWinner,
+  onTiebreaker,
   label,
 }: {
   match: import("@/lib/types").Match;
@@ -755,6 +821,7 @@ function SeriesMatchCell({
   cars: Car[];
   onSelectCar: (gameId: string, side: "A" | "B", carId: string | null) => void;
   onPickWinner: (gameId: string, winnerCarId: string) => void;
+  onTiebreaker?: (teamWinnerId: string, winnerCarId: string, loserCarId: string | null) => void;
   label?: string;
 }) {
   const aRoster = (teamA?.carIds ?? [])
@@ -771,6 +838,42 @@ function SeriesMatchCell({
       : match.winnerId === teamB?.id
         ? teamB?.name
         : null;
+
+  // Detect a tied series: all games decided but neither team reached majority.
+  const allDone = series.length > 0 && series.every((g) => !!g.winnerCarId);
+  let aWins = 0;
+  let bWins = 0;
+  series.forEach((g) => {
+    if (!g.winnerCarId) return;
+    if (aRoster.some((c) => c.id === g.winnerCarId)) aWins++;
+    else if (bRoster.some((c) => c.id === g.winnerCarId)) bWins++;
+  });
+  const isTied = allDone && !matchDone && aWins === bWins;
+
+  const [tbOpen, setTbOpen] = useState(false);
+  const [tbA, setTbA] = useState<Car | null>(null);
+  const [tbB, setTbB] = useState<Car | null>(null);
+
+  function rollTiebreaker() {
+    if (aRoster.length === 0 || bRoster.length === 0) return;
+    setTbA(aRoster[Math.floor(Math.random() * aRoster.length)]);
+    setTbB(bRoster[Math.floor(Math.random() * bRoster.length)]);
+  }
+
+  function openTiebreaker() {
+    rollTiebreaker();
+    setTbOpen(true);
+  }
+
+  function resolveTiebreaker(side: "A" | "B") {
+    if (!tbA || !tbB || !teamA || !teamB || !onTiebreaker) return;
+    const winnerTeam = side === "A" ? teamA.id : teamB.id;
+    const winnerCar = side === "A" ? tbA.id : tbB.id;
+    const loserCar = side === "A" ? tbB.id : tbA.id;
+    onTiebreaker(winnerTeam, winnerCar, loserCar);
+    setTbOpen(false);
+  }
+
   return (
     <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
       {label && (
@@ -796,6 +899,18 @@ function SeriesMatchCell({
       {winnerName && (
         <div className="flex items-center gap-1.5 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
           <Trophy className="h-3 w-3" /> Series winner: {winnerName}
+        </div>
+      )}
+      {isTied && (
+        <div className="flex items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
+          <span className="flex items-center gap-1.5">
+            <Dices className="h-3.5 w-3.5" /> Tied {aWins}-{bWins} — tiebreaker needed
+          </span>
+          {onTiebreaker && (
+            <Button size="sm" className="h-7 text-xs" onClick={openTiebreaker}>
+              Run tiebreaker
+            </Button>
+          )}
         </div>
       )}
       <div className="space-y-2 p-2">
@@ -866,6 +981,44 @@ function SeriesMatchCell({
           );
         })}
       </div>
+      <Dialog open={tbOpen} onOpenChange={setTbOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tiebreaker race</DialogTitle>
+            <DialogDescription>
+              One car has been randomly selected from each team. Run the race, then pick the winner.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-2">
+            <div className="rounded border border-border p-3 text-center">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {teamA?.name ?? "Team A"}
+              </div>
+              <div className="mt-1 text-sm font-semibold">{tbA?.name ?? "—"}</div>
+            </div>
+            <span className="text-xs text-muted-foreground">vs</span>
+            <div className="rounded border border-border p-3 text-center">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {teamB?.name ?? "Team B"}
+              </div>
+              <div className="mt-1 text-sm font-semibold">{tbB?.name ?? "—"}</div>
+            </div>
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+            <Button variant="outline" size="sm" onClick={rollTiebreaker}>
+              <Dices className="mr-2 h-4 w-4" /> Reroll
+            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => resolveTiebreaker("A")} disabled={!tbA || !tbB}>
+                <Trophy className="mr-2 h-4 w-4" /> {teamA?.name ?? "A"} wins
+              </Button>
+              <Button size="sm" onClick={() => resolveTiebreaker("B")} disabled={!tbA || !tbB}>
+                <Trophy className="mr-2 h-4 w-4" /> {teamB?.name ?? "B"} wins
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -1085,7 +1238,7 @@ function MatchCell({
 }
 
 function Bracket({
-  t, cars, carById, teamById, onPick, onSelectSeriesCar, onPickSeriesGame,
+  t, cars, carById, teamById, onPick, onSelectSeriesCar, onPickSeriesGame, onTiebreaker,
 }: {
   t: Tournament;
   cars?: Car[];
@@ -1094,6 +1247,7 @@ function Bracket({
   onPick: (matchId: string, winnerId: string) => void;
   onSelectSeriesCar?: (matchId: string, gameId: string, side: "A" | "B", carId: string | null) => void;
   onPickSeriesGame?: (matchId: string, gameId: string, winnerCarId: string) => void;
+  onTiebreaker?: (matchId: string, teamWinnerId: string, winnerCarId: string, loserCarId: string | null) => void;
 }) {
   const isDouble = t.format === "double";
   const isTeams = t.participationType === "teams";
@@ -1108,6 +1262,11 @@ function Bracket({
         cars={cars ?? []}
         onSelectCar={(gid, side, cid) => onSelectSeriesCar!(m.id, gid, side, cid)}
         onPickWinner={(gid, cid) => onPickSeriesGame!(m.id, gid, cid)}
+        onTiebreaker={
+          onTiebreaker
+            ? (teamW, carW, carL) => onTiebreaker(m.id, teamW, carW, carL)
+            : undefined
+        }
       />
     ) : (
       <MatchCell
@@ -1185,7 +1344,7 @@ function Bracket({
 }
 
 function RoundRobin({
-  t, cars, teams, onPick, onSelectSeriesCar, onPickSeriesGame,
+  t, cars, teams, onPick, onSelectSeriesCar, onPickSeriesGame, onTiebreaker,
 }: {
   t: Tournament;
   cars: Car[];
@@ -1193,6 +1352,7 @@ function RoundRobin({
   onPick: (matchId: string, winnerId: string) => void;
   onSelectSeriesCar?: (matchId: string, gameId: string, side: "A" | "B", carId: string | null) => void;
   onPickSeriesGame?: (matchId: string, gameId: string, winnerCarId: string) => void;
+  onTiebreaker?: (matchId: string, teamWinnerId: string, winnerCarId: string, loserCarId: string | null) => void;
 }) {
   const standings = standingsFor(t, cars, teams);
   const isTeams = t.participationType === "teams";
@@ -1216,6 +1376,11 @@ function RoundRobin({
                 cars={cars}
                 onSelectCar={(gid, side, cid) => onSelectSeriesCar!(m.id, gid, side, cid)}
                 onPickWinner={(gid, cid) => onPickSeriesGame!(m.id, gid, cid)}
+                onTiebreaker={
+                  onTiebreaker
+                    ? (teamW, carW, carL) => onTiebreaker(m.id, teamW, carW, carL)
+                    : undefined
+                }
               />
             ) : (
               <MatchCell
