@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Tournament, TimeEntry, Team } from "@/lib/types";
 import { applyWinner, standingsFor, buildSeededBracket, rankQualifiers } from "@/lib/bracket";
