@@ -360,6 +360,57 @@ function TournamentDetail() {
     }
   }
 
+  function pickTiebreakerWinner(
+    matchKey: "matches" | "qualifyingMatches",
+    matchId: string,
+    teamWinnerId: string,
+    winnerCarId: string,
+    loserCarId: string | null,
+  ) {
+    const arr =
+      matchKey === "matches" ? tournament.matches : tournament.qualifyingMatches ?? [];
+    const match = arr.find((m) => m.id === matchId);
+    if (!match) return;
+    const teamLoserId =
+      teamWinnerId === match.teamAId ? match.teamBId ?? null : match.teamAId ?? null;
+
+    setTournaments((prev) =>
+      prev.map((x) => {
+        if (x.id !== tournament.id) return x;
+        let updated: Tournament = x;
+        if (matchKey === "matches") {
+          updated = applyWinner(updated, matchId, teamWinnerId);
+        } else {
+          updated = {
+            ...updated,
+            qualifyingMatches: (updated.qualifyingMatches ?? []).map((m) =>
+              m.id === matchId ? { ...m, winnerId: teamWinnerId } : m,
+            ),
+          };
+        }
+        return updated;
+      }),
+    );
+
+    setCars((prev) =>
+      prev.map((c) => {
+        if (c.id === winnerCarId) return { ...c, wins: (c.wins ?? 0) + 1 };
+        if (loserCarId && c.id === loserCarId)
+          return { ...c, losses: (c.losses ?? 0) + 1 };
+        return c;
+      }),
+    );
+    setTeams((prev) =>
+      prev.map((tm) => {
+        if (tm.id === teamWinnerId) return { ...tm, wins: (tm.wins ?? 0) + 1 };
+        if (teamLoserId && tm.id === teamLoserId)
+          return { ...tm, losses: (tm.losses ?? 0) + 1 };
+        return tm;
+      }),
+    );
+    toast.success("Tiebreaker resolved!");
+  }
+
   function reset() {
     // Calculate losses and wins to decrement based on current matches
     const toDecrement = new Map<string, { wins: number; losses: number }>();
