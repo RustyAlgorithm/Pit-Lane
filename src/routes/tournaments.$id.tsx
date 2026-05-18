@@ -553,6 +553,9 @@ function TournamentDetail() {
           onPickSeriesGame={(mId, gId, cId) =>
             pickSeriesGameWinner("matches", mId, gId, cId)
           }
+          onTiebreaker={(mId, teamW, carW, carL) =>
+            pickTiebreakerWinner("matches", mId, teamW, carW, carL)
+          }
         />
       ) : tournament.format === "time-trial" ? (
         <TimeTrialView
@@ -587,6 +590,9 @@ function TournamentDetail() {
           }
           onPickSeriesGame={(mId, gId, cId) =>
             pickSeriesGameWinner("matches", mId, gId, cId)
+          }
+          onTiebreaker={(mId, teamW, carW, carL) =>
+            pickTiebreakerWinner("matches", mId, teamW, carW, carL)
           }
         />
       )}
