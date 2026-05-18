@@ -46,6 +46,7 @@ function TournamentsPage() {
   const [qualifyingFormat, setQualifyingFormat] = useState<"single" | "double">("single");
   const [advanceCountInput, setAdvanceCountInput] = useState<string>("4");
   const [persistent, setPersistent] = useState(false);
+  const [fullTeamMode, setFullTeamMode] = useState(false);
   const navigate = useNavigate();
 
   function toggle(id: string) {
@@ -54,6 +55,19 @@ function TournamentsPage() {
 
   function create() {
     if (!name.trim()) return toast.error("Tournament name required");
+    const fullTeamEligible =
+      participationType === "teams" &&
+      (format === "single" || format === "double" || format === "round-robin");
+    const useFullTeam = fullTeamEligible && fullTeamMode;
+    let seriesLength = 0;
+    if (useFullTeam) {
+      const sizes = picked
+        .map((id) => teams.find((tm) => tm.id === id)?.carIds.length ?? 0)
+        .filter((n) => n > 0);
+      seriesLength = sizes.length > 0 ? Math.max(...sizes) : 0;
+      if (seriesLength < 1)
+        return toast.error("Full-team mode needs teams that have at least 1 car");
+    }
     let minParticipants = 2;
     if (format === "time-trial") minParticipants = 1;
     if (format === "double") minParticipants = 3;
@@ -93,11 +107,12 @@ function TournamentsPage() {
       format,
       participationType,
       ...(participationType === "cars" ? { carIds: picked } : { teamIds: picked }),
-      matches: buildMatches(format, picked, participationType),
+      matches: buildMatches(format, picked, participationType, { seriesLength: useFullTeam ? seriesLength : 0 }),
       createdAt: Date.now(),
       champion: null,
       persistent,
       previousSeasons: [],
+      ...(useFullTeam ? { fullTeamMode: true, seriesLength } : {}),
       ...(format === "time-trial"
         ? { trackLength: trackLengthNum, trackUnit, times: [] }
         : {}),
@@ -106,7 +121,12 @@ function TournamentsPage() {
             qualifyingType,
             qualifyingFormat,
             advanceCount: advancePow2,
-            qualifyingMatches: buildQualifyingMatches(qualifyingType, picked, participationType),
+            qualifyingMatches: buildQualifyingMatches(
+              qualifyingType,
+              picked,
+              participationType,
+              useFullTeam ? seriesLength : 0,
+            ),
             qualifyingLocked: false,
             ...(qualifyingType === "time-trial"
               ? { trackLength: trackLengthNum, trackUnit, times: [] }
@@ -119,6 +139,7 @@ function TournamentsPage() {
     setName("");
     setPicked([]);
     setFormat("single");
+    setFullTeamMode(false);
     toast.success("Tournament created");
     navigate({ to: "/tournaments/$id", params: { id: t.id } });
   }
@@ -340,6 +361,26 @@ function TournamentsPage() {
                   <p className="text-xs text-muted-foreground font-normal mt-1">Reset after each season while preserving champion history</p>
                 </Label>
               </div>
+
+              {participationType === "teams" &&
+                (format === "single" || format === "double" || format === "round-robin") && (
+                  <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                    <Checkbox
+                      id="fullteam"
+                      checked={fullTeamMode}
+                      onCheckedChange={(checked) => setFullTeamMode(checked === true)}
+                    />
+                    <Label htmlFor="fullteam" className="cursor-pointer text-sm font-medium">
+                      Full team mode
+                      <p className="text-xs text-muted-foreground font-normal mt-1">
+                        Each team match becomes a series of car-vs-car races; series length = largest team's roster ({(() => {
+                          const sizes = picked.map((id) => teams.find((tm) => tm.id === id)?.carIds.length ?? 0);
+                          return sizes.length > 0 ? Math.max(...sizes) : 0;
+                        })()} cars). Smaller teams pick which car races each game.
+                      </p>
+                    </Label>
+                  </div>
+              )}
 
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>

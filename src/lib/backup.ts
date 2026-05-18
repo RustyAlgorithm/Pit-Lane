@@ -79,6 +79,17 @@ const matchSchema = z.object({
   winnerId: z.string().nullable().optional(),
   winnerType: z.enum(["car", "team"]).nullable().optional(),
   isGroup: z.boolean().optional(),
+  series: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        carAId: z.string().nullable(),
+        carBId: z.string().nullable(),
+        winnerCarId: z.string().nullable(),
+      }),
+    )
+    .optional(),
+  seriesLength: z.number().int().min(1).max(64).optional(),
 });
 
 const previousSeasonSchema = z.object({
@@ -121,6 +132,8 @@ const tournamentSchema = z.object({
     .optional(),
   persistent: z.boolean().optional(),
   previousSeasons: z.array(previousSeasonSchema).optional(),
+  fullTeamMode: z.boolean().optional(),
+  seriesLength: z.number().int().min(1).max(64).optional(),
 });
 
 const teamSchema = z.object({
