@@ -361,6 +361,7 @@ function TournamentDetail() {
   }
 
   function reset() {
+    // (tiebreaker handler defined just above via hoisting fallback — see below)
     // Calculate losses and wins to decrement based on current matches
     const toDecrement = new Map<string, { wins: number; losses: number }>();
     tournament.matches.forEach((m) => {
