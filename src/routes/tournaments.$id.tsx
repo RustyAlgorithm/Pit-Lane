@@ -1150,7 +1150,7 @@ function MatchCell({
 }
 
 function Bracket({
-  t, cars, carById, teamById, onPick, onSelectSeriesCar, onPickSeriesGame,
+  t, cars, carById, teamById, onPick, onSelectSeriesCar, onPickSeriesGame, onTiebreaker,
 }: {
   t: Tournament;
   cars?: Car[];
@@ -1159,6 +1159,7 @@ function Bracket({
   onPick: (matchId: string, winnerId: string) => void;
   onSelectSeriesCar?: (matchId: string, gameId: string, side: "A" | "B", carId: string | null) => void;
   onPickSeriesGame?: (matchId: string, gameId: string, winnerCarId: string) => void;
+  onTiebreaker?: (matchId: string, teamWinnerId: string, winnerCarId: string, loserCarId: string | null) => void;
 }) {
   const isDouble = t.format === "double";
   const isTeams = t.participationType === "teams";
@@ -1173,6 +1174,11 @@ function Bracket({
         cars={cars ?? []}
         onSelectCar={(gid, side, cid) => onSelectSeriesCar!(m.id, gid, side, cid)}
         onPickWinner={(gid, cid) => onPickSeriesGame!(m.id, gid, cid)}
+        onTiebreaker={
+          onTiebreaker
+            ? (teamW, carW, carL) => onTiebreaker(m.id, teamW, carW, carL)
+            : undefined
+        }
       />
     ) : (
       <MatchCell
@@ -1250,7 +1256,7 @@ function Bracket({
 }
 
 function RoundRobin({
-  t, cars, teams, onPick, onSelectSeriesCar, onPickSeriesGame,
+  t, cars, teams, onPick, onSelectSeriesCar, onPickSeriesGame, onTiebreaker,
 }: {
   t: Tournament;
   cars: Car[];
@@ -1258,6 +1264,7 @@ function RoundRobin({
   onPick: (matchId: string, winnerId: string) => void;
   onSelectSeriesCar?: (matchId: string, gameId: string, side: "A" | "B", carId: string | null) => void;
   onPickSeriesGame?: (matchId: string, gameId: string, winnerCarId: string) => void;
+  onTiebreaker?: (matchId: string, teamWinnerId: string, winnerCarId: string, loserCarId: string | null) => void;
 }) {
   const standings = standingsFor(t, cars, teams);
   const isTeams = t.participationType === "teams";
@@ -1281,6 +1288,11 @@ function RoundRobin({
                 cars={cars}
                 onSelectCar={(gid, side, cid) => onSelectSeriesCar!(m.id, gid, side, cid)}
                 onPickWinner={(gid, cid) => onPickSeriesGame!(m.id, gid, cid)}
+                onTiebreaker={
+                  onTiebreaker
+                    ? (teamW, carW, carL) => onTiebreaker(m.id, teamW, carW, carL)
+                    : undefined
+                }
               />
             ) : (
               <MatchCell
