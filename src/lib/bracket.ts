@@ -434,3 +434,190 @@ export function buildQualifyingMatches(
   if (qualifyingType === "time-trial") return [];
   return buildMatches("round-robin", participantIds, participationType, { seriesLength });
 }
+
+/** Heat rounds: each round defines lanes per heat and how many advance per heat. */
+export interface HeatRoundCfg {
+  lanes: number;
+  advance: number;
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/** Build heat matches from a round configuration. */
+export function buildHeats(
+  rounds: HeatRoundCfg[],
+  participantIds: string[],
+): Match[] {
+  if (rounds.length === 0 || participantIds.length < 2) return [];
+  const shuffled = shuffle(participantIds);
+  const matches: Match[] = [];
+
+  // Round 1
+  const r1 = rounds[0];
+  const groups = chunk(shuffled, r1.lanes);
+  groups.forEach((g, heatIndex) => {
+    const slots: (string | null)[] = [...g];
+    while (slots.length < r1.lanes) slots.push(null);
+    matches.push({
+      id: uid(),
+      round: 1,
+      slot: heatIndex,
+      heatRound: 1,
+      heatIndex,
+      participantIds: slots,
+      finishOrder: Array(r1.lanes).fill(null),
+      winnerId: null,
+    });
+  });
+
+  // Subsequent rounds: empty heats sized so prev_heats * advance fills them
+  let prevHeats = groups.length;
+  let prevAdvance = r1.advance;
+  for (let r = 2; r <= rounds.length; r++) {
+    const cfg = rounds[r - 1];
+    const intake = prevHeats * prevAdvance;
+    const heatCount = Math.max(1, Math.ceil(intake / cfg.lanes));
+    for (let i = 0; i < heatCount; i++) {
+      matches.push({
+        id: uid(),
+        round: r,
+        slot: i,
+        heatRound: r,
+        heatIndex: i,
+        participantIds: Array(cfg.lanes).fill(null),
+        finishOrder: Array(cfg.lanes).fill(null),
+        winnerId: null,
+      });
+    }
+    prevHeats = heatCount;
+    prevAdvance = cfg.advance;
+  }
+
+  return matches;
+}
+
+/** Apply heat finish order; propagates advancers to the next round and seeds consolation when complete. */
+export function applyHeatFinish(
+  t: Tournament,
+  matchId: string,
+  finishOrder: (string | null)[],
+): Tournament {
+  const rounds = t.heatRounds ?? [];
+  if (rounds.length === 0) return t;
+  const matches = t.matches.map((m) => ({ ...m }));
+  const idx = matches.findIndex((m) => m.id === matchId);
+  if (idx === -1) return t;
+  const m = matches[idx];
+  m.finishOrder = [...finishOrder];
+  m.winnerId = finishOrder[0] ?? null;
+
+  const r = m.heatRound ?? m.round;
+  const cfg = rounds[r - 1];
+
+  // Recompute round r+1 intakes (so re-recording also re-distributes).
+  if (r < rounds.length) {
+    const sameRound = matches
+      .filter((x) => x.heatRound === r && !x.isConsolation)
+      .sort((a, b) => (a.heatIndex ?? 0) - (b.heatIndex ?? 0));
+    const advancers: (string | null)[] = [];
+    for (const heat of sameRound) {
+      const fo = heat.finishOrder ?? [];
+      for (let i = 0; i < cfg.advance; i++) {
+        advancers.push(fo[i] ?? null);
+      }
+    }
+    const nextCfg = rounds[r];
+    const nextHeats = matches
+      .filter((x) => x.heatRound === r + 1 && !x.isConsolation)
+      .sort((a, b) => (a.heatIndex ?? 0) - (b.heatIndex ?? 0));
+    nextHeats.forEach((heat, hi) => {
+      const slots: (string | null)[] = [];
+      for (let lane = 0; lane < nextCfg.lanes; lane++) {
+        slots.push(advancers[hi * nextCfg.lanes + lane] ?? null);
+      }
+      // Reset finish order if intake changed
+      const prevSlots = heat.participantIds ?? [];
+      const changed =
+        slots.length !== prevSlots.length ||
+        slots.some((id, i) => id !== prevSlots[i]);
+      heat.participantIds = slots;
+      if (changed) {
+        heat.finishOrder = Array(nextCfg.lanes).fill(null);
+        heat.winnerId = null;
+      }
+    });
+  }
+
+  // Build / update consolation heat if enabled and main rounds all complete.
+  const mainDone = matches
+    .filter((x) => !x.isConsolation)
+    .every((x) => (x.finishOrder ?? []).every((s) => s !== null) || (x.participantIds ?? []).every((s) => s === null));
+
+  // Determine champion (winner of last round's only heat).
+  const lastRound = rounds.length;
+  const finalHeat = matches.find((x) => x.heatRound === lastRound && !x.isConsolation);
+  let champion: string | null = null;
+  if (finalHeat && finalHeat.winnerId) champion = finalHeat.winnerId;
+
+  if (t.consolation) {
+    // Eliminated = all round-1 participants minus those who reached the final round.
+    const r1Heats = matches.filter((x) => x.heatRound === 1 && !x.isConsolation);
+    const allParticipants: string[] = [];
+    r1Heats.forEach((h) =>
+      (h.participantIds ?? []).forEach((id) => {
+        if (id) allParticipants.push(id);
+      }),
+    );
+    const finalists: string[] = [];
+    matches
+      .filter((x) => x.heatRound === lastRound && !x.isConsolation)
+      .forEach((h) =>
+        (h.participantIds ?? []).forEach((id) => {
+          if (id) finalists.push(id);
+        }),
+      );
+    const eliminated = allParticipants.filter((id) => !finalists.includes(id));
+
+    const existing = matches.find((x) => x.isConsolation);
+    if (mainDone && eliminated.length >= 2) {
+      if (existing) {
+        const prevSlots = existing.participantIds ?? [];
+        const changed =
+          eliminated.length !== prevSlots.length ||
+          eliminated.some((id, i) => id !== prevSlots[i]);
+        if (changed) {
+          existing.participantIds = eliminated;
+          existing.finishOrder = Array(eliminated.length).fill(null);
+          existing.winnerId = null;
+        }
+      } else {
+        matches.push({
+          id: uid(),
+          round: lastRound + 1,
+          slot: 0,
+          heatRound: lastRound + 1,
+          heatIndex: 0,
+          isConsolation: true,
+          participantIds: eliminated,
+          finishOrder: Array(eliminated.length).fill(null),
+          winnerId: null,
+        });
+      }
+    } else if (existing && !mainDone) {
+      // Remove stale consolation heat if main bracket re-opened.
+      const ci = matches.indexOf(existing);
+      matches.splice(ci, 1);
+    }
+  }
+
+  return {
+    ...t,
+    matches,
+    champion,
+    championType: champion ? (t.participationType === "teams" ? "team" : "car") : null,
+  };
+}
