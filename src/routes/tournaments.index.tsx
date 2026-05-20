@@ -293,6 +293,105 @@ function TournamentsPage() {
                 </div>
               )}
 
+              {format === "heats" && (
+                <div className="rounded-lg border border-border bg-secondary/30 p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <Label className="text-sm font-semibold">Heat rounds</Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setHeatRounds((rs) => [...rs, { lanes: 2, advance: 1 }])
+                      }
+                    >
+                      <Plus className="mr-1 h-3 w-3" /> Add round
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {heatRounds.map((r, i) => (
+                      <div
+                        key={i}
+                        className="grid grid-cols-[auto_1fr_1fr_auto] items-end gap-2"
+                      >
+                        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pb-2">
+                          R{i + 1}
+                        </div>
+                        <div>
+                          <Label className="text-xs">Lanes</Label>
+                          <Input
+                            type="number"
+                            min={2}
+                            max={32}
+                            value={r.lanes}
+                            onChange={(e) => {
+                              const v = Math.max(2, Number(e.target.value) || 2);
+                              setHeatRounds((rs) =>
+                                rs.map((x, idx) => (idx === i ? { ...x, lanes: v } : x)),
+                              );
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Advance</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={32}
+                            value={r.advance}
+                            onChange={(e) => {
+                              const v = Math.max(1, Number(e.target.value) || 1);
+                              setHeatRounds((rs) =>
+                                rs.map((x, idx) => (idx === i ? { ...x, advance: v } : x)),
+                              );
+                            }}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={heatRounds.length <= 1}
+                          onClick={() =>
+                            setHeatRounds((rs) => rs.filter((_, idx) => idx !== i))
+                          }
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[11px] text-muted-foreground">
+                    {(() => {
+                      const parts: string[] = [];
+                      let intake = picked.length || heatRounds[0].lanes;
+                      heatRounds.forEach((r, i) => {
+                        const heats = Math.max(1, Math.ceil(intake / r.lanes));
+                        parts.push(
+                          `R${i + 1}: ${heats} heat${heats > 1 ? "s" : ""} × ${r.lanes} lanes (top ${r.advance})`,
+                        );
+                        intake = heats * r.advance;
+                      });
+                      parts.push(`Champion: 1`);
+                      return parts.join(" → ");
+                    })()}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Final round must have advance = 1. Round 1 needs at least {heatRounds[0]?.lanes ?? 2} participants.
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Checkbox
+                      id="consolation"
+                      checked={consolation}
+                      onCheckedChange={(c) => setConsolation(c === true)}
+                    />
+                    <Label htmlFor="consolation" className="cursor-pointer text-xs font-medium">
+                      Consolation heat — all eliminated racers face off after the final
+                    </Label>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <Label htmlFor="ptype">Participants</Label>
                 <div className="flex gap-2 mt-2">
