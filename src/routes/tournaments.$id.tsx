@@ -494,6 +494,22 @@ function TournamentDetail() {
       prev.map((x) => {
         if (x.id !== tournament.id) return x;
         const isTeams = x.participationType === "teams";
+        if (x.format === "heats") {
+          const matches = x.matches
+            .filter((m) => !m.isConsolation)
+            .map((m) => {
+              const r = m.heatRound ?? m.round;
+              const lanes = m.participantIds?.length ?? 0;
+              return {
+                ...m,
+                winnerId: null,
+                finishOrder: Array(lanes).fill(null),
+                participantIds:
+                  r === 1 ? m.participantIds : Array(lanes).fill(null),
+              };
+            });
+          return { ...x, champion: null, championType: null, matches };
+        }
         const matches = x.matches.map((m) => {
           if (x.format === "round-robin") {
             return {
