@@ -107,7 +107,7 @@ const previousSeasonSchema = z.object({
 const tournamentSchema = z.object({
   id: z.string().min(1, "missing id"),
   name: z.string().min(1, "missing name").max(120),
-  format: z.enum(["single", "double", "round-robin", "time-trial", "championship"]),
+  format: z.enum(["single", "double", "round-robin", "time-trial", "championship", "heats"]),
   participationType: z.enum(["cars", "teams"]),
   carIds: z.array(z.string()).optional(),
   teamIds: z.array(z.string()).optional(),
