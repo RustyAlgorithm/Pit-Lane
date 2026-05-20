@@ -2,7 +2,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Tournament, TimeEntry, Team } from "@/lib/types";
-import { applyWinner, standingsFor, buildSeededBracket, rankQualifiers } from "@/lib/bracket";
+import { applyWinner, standingsFor, buildSeededBracket, rankQualifiers, applyHeatFinish } from "@/lib/bracket";
 import { getTournamentPlacements } from "@/lib/tournamentPlacements";
 import { toast } from "sonner";
 import { TournamentCertificateDialog } from "@/components/TournamentCertificateDialog";
