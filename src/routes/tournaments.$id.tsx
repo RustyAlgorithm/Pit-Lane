@@ -962,25 +962,12 @@ function HeatCard({
   const [order, setOrder] = useState<string[]>(() =>
     (match.finishOrder ?? []).filter((id): id is string => !!id),
   );
-  // Re-sync if upstream finishOrder changes (e.g. heat re-seeded from prior round).
-  const finishOrderKey = (match.finishOrder ?? []).join(",");
   const participantsKey = participants.join(",");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const _resync = (() => {
-    if (recorded && order.join(",") !== finishOrderKey) {
-      // ignore; recorded means we show match.finishOrder directly below
-    }
-    return null;
-  })();
-  // when participants change (round re-seeded), reset working order
-  const lastSeen = (HeatCard as unknown as { _last?: Map<string, string> })._last ??=
-    new Map<string, string>();
-  if (lastSeen.get(match.id) !== participantsKey) {
-    lastSeen.set(match.id, participantsKey);
-    if (!recorded) {
-      // Reset local working order when intake changes (without breaking React rules — happens on render of a remount-key scenario isn't needed since participants render the buttons fresh).
-    }
-  }
+  // Reset working order when intake changes (heat re-seeded from a prior round).
+  useEffect(() => {
+    if (!recorded) setOrder([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participantsKey]);
 
   function toggle(id: string) {
     if (recorded) return;
