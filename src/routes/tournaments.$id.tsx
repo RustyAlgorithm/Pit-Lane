@@ -411,6 +411,61 @@ function TournamentDetail() {
     toast.success("Tiebreaker resolved!");
   }
 
+  function recordHeatFinish(matchId: string, finishOrder: (string | null)[]) {
+    const isTeams = tournament.participationType === "teams";
+    const match = tournament.matches.find((m) => m.id === matchId);
+    if (!match) return;
+    // Compute prior winner/losers so we can reverse them before applying new result.
+    const prevWinner = match.winnerId ?? null;
+    const prevLosers = (match.participantIds ?? []).filter(
+      (id): id is string => !!id && id !== prevWinner,
+    );
+    const newWinner = finishOrder[0] ?? null;
+    const newLosers = (finishOrder.slice(1).filter((id) => !!id) as string[]);
+
+    setTournaments((prev) =>
+      prev.map((x) => (x.id === tournament.id ? applyHeatFinish(x, matchId, finishOrder) : x)),
+    );
+
+    const adj = new Map<string, { w: number; l: number }>();
+    const bump = (id: string, w: number, l: number) => {
+      const cur = adj.get(id) ?? { w: 0, l: 0 };
+      cur.w += w;
+      cur.l += l;
+      adj.set(id, cur);
+    };
+    if (prevWinner) bump(prevWinner, -1, 0);
+    prevLosers.forEach((id) => bump(id, 0, -1));
+    if (newWinner) bump(newWinner, 1, 0);
+    newLosers.forEach((id) => bump(id, 0, 1));
+
+    if (isTeams) {
+      setTeams((prev) =>
+        prev.map((tm) => {
+          const d = adj.get(tm.id);
+          if (!d) return tm;
+          return {
+            ...tm,
+            wins: Math.max(0, (tm.wins ?? 0) + d.w),
+            losses: Math.max(0, (tm.losses ?? 0) + d.l),
+          };
+        }),
+      );
+    } else {
+      setCars((prev) =>
+        prev.map((c) => {
+          const d = adj.get(c.id);
+          if (!d) return c;
+          return {
+            ...c,
+            wins: Math.max(0, (c.wins ?? 0) + d.w),
+            losses: Math.max(0, (c.losses ?? 0) + d.l),
+          };
+        }),
+      );
+    }
+  }
+
   function reset() {
     // Calculate losses and wins to decrement based on current matches
     const toDecrement = new Map<string, { wins: number; losses: number }>();
