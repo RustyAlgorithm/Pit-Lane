@@ -576,7 +576,9 @@ function TournamentDetail() {
                   ? "Round-robin"
                   : tournament.format === "time-trial"
                     ? "Time trial"
-                    : `Championship • ${tournament.qualifyingType === "round-robin" ? "Round-robin" : "Time trial"} → ${tournament.qualifyingFormat === "double" ? "Double" : "Single"} elim`}
+                    : tournament.format === "heats"
+                      ? `Heats • ${(tournament.heatRounds ?? []).length} rounds`
+                      : `Championship • ${tournament.qualifyingType === "round-robin" ? "Round-robin" : "Time trial"} → ${tournament.qualifyingFormat === "double" ? "Double" : "Single"} elim`}
             {" • "}
             {tournament.participationType === "teams" ? (tournament.teamIds?.length || 0) : (tournament.carIds?.length || 0)} {tournament.participationType === "teams" ? "teams" : "cars"}
           </p>
@@ -632,6 +634,13 @@ function TournamentDetail() {
           onChange={(updater) =>
             setTournaments((prev) => prev.map((x) => (x.id === tournament.id ? updater(x) : x)))
           }
+        />
+      ) : tournament.format === "heats" ? (
+        <HeatsView
+          t={tournament}
+          cars={cars}
+          teams={teams}
+          onRecord={recordHeatFinish}
         />
       ) : (
         <Bracket
