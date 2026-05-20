@@ -3,7 +3,8 @@ export type BracketFormat =
   | "double"
   | "round-robin"
   | "time-trial"
-  | "championship";
+  | "championship"
+  | "heats";
 
 export type TrackUnit = "cm" | "m" | "ft";
 
@@ -46,6 +47,12 @@ export interface Match {
   // full-team mode (team tournaments): each team-vs-team match is a series of car-vs-car games
   series?: SeriesGame[];
   seriesLength?: number;
+  // heats format (multi-lane racing)
+  heatRound?: number;
+  heatIndex?: number;
+  participantIds?: (string | null)[];
+  finishOrder?: (string | null)[];
+  isConsolation?: boolean;
 }
 
 export interface SeriesGame {
@@ -83,6 +90,9 @@ export interface Tournament {
   // persistent tournaments
   persistent?: boolean;
   previousSeasons?: { season: number; champion: string; championType: "car" | "team"; dateEnded: number }[];
+  // heats format
+  heatRounds?: { lanes: number; advance: number }[];
+  consolation?: boolean;
 }
 
 export interface Team {
