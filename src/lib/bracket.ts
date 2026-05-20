@@ -33,6 +33,7 @@ export function buildMatches(
 ): Match[] {
   if (format === "time-trial") return [];
   if (format === "championship") return [];
+  if (format === "heats") return [];
   if (participantIds.length < 2) return [];
   const ids = shuffle(participantIds);
   const isTeams = participationType === "teams";
