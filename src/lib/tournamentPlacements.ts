@@ -251,6 +251,17 @@ export function getTournamentPlacements(
     return placementsFromOrderedIds(rankTimeTrialParticipants(tournament, teams), type, cars, teams);
   }
 
+  if (tournament.format === "heats") {
+    const rounds = (tournament.heatRounds ?? []).length;
+    if (!rounds) return [];
+    const finalHeat = tournament.matches.find(
+      (m) => !m.isConsolation && (m.heatRound ?? m.round) === rounds,
+    );
+    if (!finalHeat || !finalHeat.winnerId) return [];
+    const order = (finalHeat.finishOrder ?? []).filter((id): id is string => !!id);
+    return placementsFromOrderedIds(order, type, cars, teams);
+  }
+
   const effectiveFormat = tournament.format === "championship" ? (tournament.qualifyingFormat ?? "single") : tournament.format;
   if (effectiveFormat === "double") return doubleEliminationPlacements(tournament, cars, teams);
   return singleEliminationPlacements(tournament, cars, teams);
