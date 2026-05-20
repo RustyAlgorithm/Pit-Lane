@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Team, Tournament, BracketFormat } from "@/lib/types";
-import { buildMatches, buildQualifyingMatches, nextPow2Down } from "@/lib/bracket";
+import { buildMatches, buildQualifyingMatches, nextPow2Down, buildHeats } from "@/lib/bracket";
 import { Plus, Trophy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CarCard } from "@/components/CarCard";
@@ -29,6 +29,7 @@ const FORMAT_LABEL: Record<BracketFormat, string> = {
   "round-robin": "Round-robin",
   "time-trial": "Time trial",
   championship: "Championship",
+  heats: "Heats",
 };
 
 function TournamentsPage() {
@@ -47,6 +48,11 @@ function TournamentsPage() {
   const [advanceCountInput, setAdvanceCountInput] = useState<string>("4");
   const [persistent, setPersistent] = useState(false);
   const [fullTeamMode, setFullTeamMode] = useState(false);
+  const [heatRounds, setHeatRounds] = useState<{ lanes: number; advance: number }[]>([
+    { lanes: 4, advance: 2 },
+    { lanes: 2, advance: 1 },
+  ]);
+  const [consolation, setConsolation] = useState(false);
   const navigate = useNavigate();
 
   function toggle(id: string) {
@@ -82,6 +88,22 @@ function TournamentsPage() {
         return toast.error(`Need at least 2 ${participationType === "cars" ? "cars" : "teams"} in the bracket`);
       minParticipants = Math.max(advancePow2, qualifyingFormat === "double" ? 3 : 2);
     }
+    if (format === "heats") {
+      if (heatRounds.length === 0) return toast.error("Add at least one heat round");
+      for (let i = 0; i < heatRounds.length; i++) {
+        const r = heatRounds[i];
+        if (!Number.isFinite(r.lanes) || r.lanes < 2)
+          return toast.error(`Round ${i + 1}: lanes must be at least 2`);
+        if (!Number.isFinite(r.advance) || r.advance < 1)
+          return toast.error(`Round ${i + 1}: advance must be at least 1`);
+        if (r.advance >= r.lanes)
+          return toast.error(`Round ${i + 1}: advance must be less than lanes`);
+      }
+      const last = heatRounds[heatRounds.length - 1];
+      if (last.advance !== 1)
+        return toast.error("Final round must have advance = 1");
+      minParticipants = heatRounds[0].lanes;
+    }
     if (picked.length < minParticipants) {
       if (format === "time-trial") {
         return toast.error(`Pick at least 1 ${participationType === "cars" ? "car" : "team"}`);
@@ -91,6 +113,8 @@ function TournamentsPage() {
         return toast.error(`Pick at least 3 ${participationType === "cars" ? "cars" : "teams"} for round-robin`);
       } else if (format === "championship") {
         return toast.error(`Pick at least ${minParticipants} ${participationType === "cars" ? "cars" : "teams"}`);
+      } else if (format === "heats") {
+        return toast.error(`Pick at least ${minParticipants} ${participationType === "cars" ? "cars" : "teams"} (round 1 lanes)`);
       } else {
         return toast.error(`Pick at least 2 ${participationType === "cars" ? "cars" : "teams"}`);
       }
@@ -107,12 +131,16 @@ function TournamentsPage() {
       format,
       participationType,
       ...(participationType === "cars" ? { carIds: picked } : { teamIds: picked }),
-      matches: buildMatches(format, picked, participationType, { seriesLength: useFullTeam ? seriesLength : 0 }),
+      matches:
+        format === "heats"
+          ? buildHeats(heatRounds, picked)
+          : buildMatches(format, picked, participationType, { seriesLength: useFullTeam ? seriesLength : 0 }),
       createdAt: Date.now(),
       champion: null,
       persistent,
       previousSeasons: [],
       ...(useFullTeam ? { fullTeamMode: true, seriesLength } : {}),
+      ...(format === "heats" ? { heatRounds: [...heatRounds], consolation } : {}),
       ...(format === "time-trial"
         ? { trackLength: trackLengthNum, trackUnit, times: [] }
         : {}),
