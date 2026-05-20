@@ -168,6 +168,8 @@ function TournamentsPage() {
     setPicked([]);
     setFormat("single");
     setFullTeamMode(false);
+    setHeatRounds([{ lanes: 4, advance: 2 }, { lanes: 2, advance: 1 }]);
+    setConsolation(false);
     toast.success("Tournament created");
     navigate({ to: "/tournaments/$id", params: { id: t.id } });
   }
@@ -212,6 +214,7 @@ function TournamentsPage() {
                     <option value="round-robin">Round-robin</option>
                     <option value="time-trial">Time trial</option>
                     <option value="championship">Championship (qualifying + bracket)</option>
+                    <option value="heats">Heats (multi-lane)</option>
                   </select>
                 </div>
               </div>
