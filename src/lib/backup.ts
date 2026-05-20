@@ -90,6 +90,11 @@ const matchSchema = z.object({
     )
     .optional(),
   seriesLength: z.number().int().min(1).max(64).optional(),
+  heatRound: z.number().int().positive().optional(),
+  heatIndex: z.number().int().nonnegative().optional(),
+  participantIds: z.array(z.string().nullable()).optional(),
+  finishOrder: z.array(z.string().nullable()).optional(),
+  isConsolation: z.boolean().optional(),
 });
 
 const previousSeasonSchema = z.object({
@@ -102,7 +107,7 @@ const previousSeasonSchema = z.object({
 const tournamentSchema = z.object({
   id: z.string().min(1, "missing id"),
   name: z.string().min(1, "missing name").max(120),
-  format: z.enum(["single", "double", "round-robin", "time-trial", "championship"]),
+  format: z.enum(["single", "double", "round-robin", "time-trial", "championship", "heats"]),
   participationType: z.enum(["cars", "teams"]),
   carIds: z.array(z.string()).optional(),
   teamIds: z.array(z.string()).optional(),
@@ -134,6 +139,10 @@ const tournamentSchema = z.object({
   previousSeasons: z.array(previousSeasonSchema).optional(),
   fullTeamMode: z.boolean().optional(),
   seriesLength: z.number().int().min(1).max(64).optional(),
+  heatRounds: z
+    .array(z.object({ lanes: z.number().int().min(2).max(32), advance: z.number().int().min(1).max(32) }))
+    .optional(),
+  consolation: z.boolean().optional(),
 });
 
 const teamSchema = z.object({

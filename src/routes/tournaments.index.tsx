@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Team, Tournament, BracketFormat } from "@/lib/types";
-import { buildMatches, buildQualifyingMatches, nextPow2Down } from "@/lib/bracket";
+import { buildMatches, buildQualifyingMatches, nextPow2Down, buildHeats } from "@/lib/bracket";
 import { Plus, Trophy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CarCard } from "@/components/CarCard";
@@ -29,6 +29,7 @@ const FORMAT_LABEL: Record<BracketFormat, string> = {
   "round-robin": "Round-robin",
   "time-trial": "Time trial",
   championship: "Championship",
+  heats: "Heats",
 };
 
 function TournamentsPage() {
@@ -47,6 +48,11 @@ function TournamentsPage() {
   const [advanceCountInput, setAdvanceCountInput] = useState<string>("4");
   const [persistent, setPersistent] = useState(false);
   const [fullTeamMode, setFullTeamMode] = useState(false);
+  const [heatRounds, setHeatRounds] = useState<{ lanes: number; advance: number }[]>([
+    { lanes: 4, advance: 2 },
+    { lanes: 2, advance: 1 },
+  ]);
+  const [consolation, setConsolation] = useState(false);
   const navigate = useNavigate();
 
   function toggle(id: string) {
@@ -82,6 +88,22 @@ function TournamentsPage() {
         return toast.error(`Need at least 2 ${participationType === "cars" ? "cars" : "teams"} in the bracket`);
       minParticipants = Math.max(advancePow2, qualifyingFormat === "double" ? 3 : 2);
     }
+    if (format === "heats") {
+      if (heatRounds.length === 0) return toast.error("Add at least one heat round");
+      for (let i = 0; i < heatRounds.length; i++) {
+        const r = heatRounds[i];
+        if (!Number.isFinite(r.lanes) || r.lanes < 2)
+          return toast.error(`Round ${i + 1}: lanes must be at least 2`);
+        if (!Number.isFinite(r.advance) || r.advance < 1)
+          return toast.error(`Round ${i + 1}: advance must be at least 1`);
+        if (r.advance >= r.lanes)
+          return toast.error(`Round ${i + 1}: advance must be less than lanes`);
+      }
+      const last = heatRounds[heatRounds.length - 1];
+      if (last.advance !== 1)
+        return toast.error("Final round must have advance = 1");
+      minParticipants = heatRounds[0].lanes;
+    }
     if (picked.length < minParticipants) {
       if (format === "time-trial") {
         return toast.error(`Pick at least 1 ${participationType === "cars" ? "car" : "team"}`);
@@ -91,6 +113,8 @@ function TournamentsPage() {
         return toast.error(`Pick at least 3 ${participationType === "cars" ? "cars" : "teams"} for round-robin`);
       } else if (format === "championship") {
         return toast.error(`Pick at least ${minParticipants} ${participationType === "cars" ? "cars" : "teams"}`);
+      } else if (format === "heats") {
+        return toast.error(`Pick at least ${minParticipants} ${participationType === "cars" ? "cars" : "teams"} (round 1 lanes)`);
       } else {
         return toast.error(`Pick at least 2 ${participationType === "cars" ? "cars" : "teams"}`);
       }
@@ -107,12 +131,16 @@ function TournamentsPage() {
       format,
       participationType,
       ...(participationType === "cars" ? { carIds: picked } : { teamIds: picked }),
-      matches: buildMatches(format, picked, participationType, { seriesLength: useFullTeam ? seriesLength : 0 }),
+      matches:
+        format === "heats"
+          ? buildHeats(heatRounds, picked)
+          : buildMatches(format, picked, participationType, { seriesLength: useFullTeam ? seriesLength : 0 }),
       createdAt: Date.now(),
       champion: null,
       persistent,
       previousSeasons: [],
       ...(useFullTeam ? { fullTeamMode: true, seriesLength } : {}),
+      ...(format === "heats" ? { heatRounds: [...heatRounds], consolation } : {}),
       ...(format === "time-trial"
         ? { trackLength: trackLengthNum, trackUnit, times: [] }
         : {}),
@@ -140,6 +168,8 @@ function TournamentsPage() {
     setPicked([]);
     setFormat("single");
     setFullTeamMode(false);
+    setHeatRounds([{ lanes: 4, advance: 2 }, { lanes: 2, advance: 1 }]);
+    setConsolation(false);
     toast.success("Tournament created");
     navigate({ to: "/tournaments/$id", params: { id: t.id } });
   }
@@ -184,6 +214,7 @@ function TournamentsPage() {
                     <option value="round-robin">Round-robin</option>
                     <option value="time-trial">Time trial</option>
                     <option value="championship">Championship (qualifying + bracket)</option>
+                    <option value="heats">Heats (multi-lane)</option>
                   </select>
                 </div>
               </div>
@@ -258,6 +289,105 @@ function TournamentsPage() {
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       Rounded down to {nextPow2Down(Math.max(2, Number(advanceCountInput) || 0))} (power of 2).
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {format === "heats" && (
+                <div className="rounded-lg border border-border bg-secondary/30 p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <Label className="text-sm font-semibold">Heat rounds</Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setHeatRounds((rs) => [...rs, { lanes: 2, advance: 1 }])
+                      }
+                    >
+                      <Plus className="mr-1 h-3 w-3" /> Add round
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {heatRounds.map((r, i) => (
+                      <div
+                        key={i}
+                        className="grid grid-cols-[auto_1fr_1fr_auto] items-end gap-2"
+                      >
+                        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pb-2">
+                          R{i + 1}
+                        </div>
+                        <div>
+                          <Label className="text-xs">Lanes</Label>
+                          <Input
+                            type="number"
+                            min={2}
+                            max={32}
+                            value={r.lanes}
+                            onChange={(e) => {
+                              const v = Math.max(2, Number(e.target.value) || 2);
+                              setHeatRounds((rs) =>
+                                rs.map((x, idx) => (idx === i ? { ...x, lanes: v } : x)),
+                              );
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Advance</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={32}
+                            value={r.advance}
+                            onChange={(e) => {
+                              const v = Math.max(1, Number(e.target.value) || 1);
+                              setHeatRounds((rs) =>
+                                rs.map((x, idx) => (idx === i ? { ...x, advance: v } : x)),
+                              );
+                            }}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={heatRounds.length <= 1}
+                          onClick={() =>
+                            setHeatRounds((rs) => rs.filter((_, idx) => idx !== i))
+                          }
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[11px] text-muted-foreground">
+                    {(() => {
+                      const parts: string[] = [];
+                      let intake = picked.length || heatRounds[0].lanes;
+                      heatRounds.forEach((r, i) => {
+                        const heats = Math.max(1, Math.ceil(intake / r.lanes));
+                        parts.push(
+                          `R${i + 1}: ${heats} heat${heats > 1 ? "s" : ""} × ${r.lanes} lanes (top ${r.advance})`,
+                        );
+                        intake = heats * r.advance;
+                      });
+                      parts.push(`Champion: 1`);
+                      return parts.join(" → ");
+                    })()}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Final round must have advance = 1. Round 1 needs at least {heatRounds[0]?.lanes ?? 2} participants.
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Checkbox
+                      id="consolation"
+                      checked={consolation}
+                      onCheckedChange={(c) => setConsolation(c === true)}
+                    />
+                    <Label htmlFor="consolation" className="cursor-pointer text-xs font-medium">
+                      Consolation heat — all eliminated racers face off after the final
+                    </Label>
                   </div>
                 </div>
               )}
