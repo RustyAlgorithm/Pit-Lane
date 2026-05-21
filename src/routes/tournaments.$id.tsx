@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocalStorage, uid } from "@/lib/storage";
 import type { Car, Tournament, TimeEntry, Team } from "@/lib/types";
-import { applyWinner, standingsFor, buildSeededBracket, rankQualifiers } from "@/lib/bracket";
+import { applyWinner, standingsFor, buildSeededBracket, rankQualifiers, applyHeatFinish } from "@/lib/bracket";
 import { getTournamentPlacements } from "@/lib/tournamentPlacements";
 import { toast } from "sonner";
 import { TournamentCertificateDialog } from "@/components/TournamentCertificateDialog";
@@ -411,6 +411,61 @@ function TournamentDetail() {
     toast.success("Tiebreaker resolved!");
   }
 
+  function recordHeatFinish(matchId: string, finishOrder: (string | null)[]) {
+    const isTeams = tournament.participationType === "teams";
+    const match = tournament.matches.find((m) => m.id === matchId);
+    if (!match) return;
+    // Compute prior winner/losers so we can reverse them before applying new result.
+    const prevWinner = match.winnerId ?? null;
+    const prevLosers = (match.participantIds ?? []).filter(
+      (id): id is string => !!id && id !== prevWinner,
+    );
+    const newWinner = finishOrder[0] ?? null;
+    const newLosers = (finishOrder.slice(1).filter((id) => !!id) as string[]);
+
+    setTournaments((prev) =>
+      prev.map((x) => (x.id === tournament.id ? applyHeatFinish(x, matchId, finishOrder) : x)),
+    );
+
+    const adj = new Map<string, { w: number; l: number }>();
+    const bump = (id: string, w: number, l: number) => {
+      const cur = adj.get(id) ?? { w: 0, l: 0 };
+      cur.w += w;
+      cur.l += l;
+      adj.set(id, cur);
+    };
+    if (prevWinner) bump(prevWinner, -1, 0);
+    prevLosers.forEach((id) => bump(id, 0, -1));
+    if (newWinner) bump(newWinner, 1, 0);
+    newLosers.forEach((id) => bump(id, 0, 1));
+
+    if (isTeams) {
+      setTeams((prev) =>
+        prev.map((tm) => {
+          const d = adj.get(tm.id);
+          if (!d) return tm;
+          return {
+            ...tm,
+            wins: Math.max(0, (tm.wins ?? 0) + d.w),
+            losses: Math.max(0, (tm.losses ?? 0) + d.l),
+          };
+        }),
+      );
+    } else {
+      setCars((prev) =>
+        prev.map((c) => {
+          const d = adj.get(c.id);
+          if (!d) return c;
+          return {
+            ...c,
+            wins: Math.max(0, (c.wins ?? 0) + d.w),
+            losses: Math.max(0, (c.losses ?? 0) + d.l),
+          };
+        }),
+      );
+    }
+  }
+
   function reset() {
     // Calculate losses and wins to decrement based on current matches
     const toDecrement = new Map<string, { wins: number; losses: number }>();
@@ -439,6 +494,22 @@ function TournamentDetail() {
       prev.map((x) => {
         if (x.id !== tournament.id) return x;
         const isTeams = x.participationType === "teams";
+        if (x.format === "heats") {
+          const matches = x.matches
+            .filter((m) => !m.isConsolation)
+            .map((m) => {
+              const r = m.heatRound ?? m.round;
+              const lanes = m.participantIds?.length ?? 0;
+              return {
+                ...m,
+                winnerId: null,
+                finishOrder: Array(lanes).fill(null),
+                participantIds:
+                  r === 1 ? m.participantIds : Array(lanes).fill(null),
+              };
+            });
+          return { ...x, champion: null, championType: null, matches };
+        }
         const matches = x.matches.map((m) => {
           if (x.format === "round-robin") {
             return {
@@ -521,7 +592,9 @@ function TournamentDetail() {
                   ? "Round-robin"
                   : tournament.format === "time-trial"
                     ? "Time trial"
-                    : `Championship • ${tournament.qualifyingType === "round-robin" ? "Round-robin" : "Time trial"} → ${tournament.qualifyingFormat === "double" ? "Double" : "Single"} elim`}
+                    : tournament.format === "heats"
+                      ? `Heats • ${(tournament.heatRounds ?? []).length} rounds`
+                      : `Championship • ${tournament.qualifyingType === "round-robin" ? "Round-robin" : "Time trial"} → ${tournament.qualifyingFormat === "double" ? "Double" : "Single"} elim`}
             {" • "}
             {tournament.participationType === "teams" ? (tournament.teamIds?.length || 0) : (tournament.carIds?.length || 0)} {tournament.participationType === "teams" ? "teams" : "cars"}
           </p>
@@ -577,6 +650,13 @@ function TournamentDetail() {
           onChange={(updater) =>
             setTournaments((prev) => prev.map((x) => (x.id === tournament.id ? updater(x) : x)))
           }
+        />
+      ) : tournament.format === "heats" ? (
+        <HeatsView
+          t={tournament}
+          cars={cars}
+          teams={teams}
+          onRecord={recordHeatFinish}
         />
       ) : (
         <Bracket
@@ -802,6 +882,216 @@ function TimeTrialView({
         </Card>
       </div>
     </div>
+  );
+}
+
+function HeatsView({
+  t,
+  cars,
+  teams,
+  onRecord,
+}: {
+  t: Tournament;
+  cars: Car[];
+  teams: Team[];
+  onRecord: (matchId: string, finishOrder: (string | null)[]) => void;
+}) {
+  const isTeams = t.participationType === "teams";
+  const nameOf = (id?: string | null) => {
+    if (!id) return "TBD";
+    return (isTeams
+      ? teams.find((tm) => tm.id === id)?.name
+      : cars.find((c) => c.id === id)?.name) ?? "Unknown";
+  };
+  const colorOf = (id?: string | null) => {
+    if (!id) return undefined;
+    if (isTeams) return teams.find((tm) => tm.id === id)?.color;
+    return teams.find((tm) => tm.carIds.includes(id))?.color;
+  };
+
+  const mainRounds = [...new Set(t.matches.filter((m) => !m.isConsolation).map((m) => m.heatRound ?? m.round))].sort(
+    (a, b) => a - b,
+  );
+  const consolation = t.matches.find((m) => m.isConsolation);
+  const totalRounds = (t.heatRounds ?? []).length;
+
+  return (
+    <div className="mt-8 space-y-8">
+      {mainRounds.map((r) => {
+        const heats = t.matches
+          .filter((m) => (m.heatRound ?? m.round) === r && !m.isConsolation)
+          .sort((a, b) => (a.heatIndex ?? 0) - (b.heatIndex ?? 0));
+        const label =
+          r === totalRounds ? "Final" : r === totalRounds - 1 ? "Semifinal" : `Round ${r}`;
+        return (
+          <section key={r}>
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">{label}</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {heats.map((m, i) => (
+                <HeatCard
+                  key={m.id}
+                  match={m}
+                  label={heats.length > 1 ? `Heat ${i + 1}` : undefined}
+                  nameOf={nameOf}
+                  colorOf={colorOf}
+                  onRecord={(order) => onRecord(m.id, order)}
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+      {consolation && (
+        <section>
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">Consolation heat</h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <HeatCard
+              match={consolation}
+              label="All eliminated racers"
+              nameOf={nameOf}
+              colorOf={colorOf}
+              onRecord={(order) => onRecord(consolation.id, order)}
+            />
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function HeatCard({
+  match,
+  label,
+  nameOf,
+  colorOf,
+  onRecord,
+}: {
+  match: import("@/lib/types").Match;
+  label?: string;
+  nameOf: (id?: string | null) => string;
+  colorOf: (id?: string | null) => string | undefined;
+  onRecord: (finishOrder: (string | null)[]) => void;
+}) {
+  const participants = match.participantIds ?? [];
+  const recorded = !!match.winnerId && (match.finishOrder ?? []).every((s) => s !== null);
+  const presentIds = participants.filter((id): id is string => !!id);
+  const [order, setOrder] = useState<string[]>(() =>
+    (match.finishOrder ?? []).filter((id): id is string => !!id),
+  );
+  const participantsKey = participants.join(",");
+  // Reset working order when intake changes (heat re-seeded from a prior round).
+  useEffect(() => {
+    if (!recorded) setOrder([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participantsKey]);
+
+  function toggle(id: string) {
+    if (recorded) return;
+    setOrder((cur) =>
+      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+    );
+  }
+
+  function record() {
+    const final: (string | null)[] = Array(participants.length).fill(null);
+    order.forEach((id, idx) => {
+      if (idx < final.length) final[idx] = id;
+    });
+    onRecord(final);
+  }
+
+  function clearLocal() {
+    setOrder([]);
+  }
+
+  const showOrder = recorded
+    ? (match.finishOrder ?? []).filter((id): id is string => !!id)
+    : order;
+  const allReady = order.length === presentIds.length;
+
+  return (
+    <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
+      {label && (
+        <div className="border-b border-border bg-secondary/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </div>
+      )}
+      {recorded ? (
+        <div className="divide-y divide-border">
+          {showOrder.map((id, i) => (
+            <div key={id} className={`flex items-center gap-2 px-3 py-2 text-sm ${i === 0 ? "bg-primary/10 font-semibold text-primary" : ""}`}>
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold tabular-nums">
+                {i + 1}
+              </span>
+              {colorOf(id) && (
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: colorOf(id) }} />
+              )}
+              <span className="flex-1 truncate">{nameOf(id)}</span>
+              {i === 0 && <Trophy className="h-3.5 w-3.5" />}
+            </div>
+          ))}
+          <div className="border-t border-border bg-secondary/20 px-3 py-2">
+            <Button size="sm" variant="ghost" onClick={() => onRecord(Array(participants.length).fill(null))}>
+              Clear results
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-1.5 p-2">
+            {participants.map((id, lane) => {
+              if (!id) {
+                return (
+                  <div key={`empty-${lane}`} className="flex items-center gap-2 rounded border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold tabular-nums">
+                      L{lane + 1}
+                    </span>
+                    Awaiting advancer
+                  </div>
+                );
+              }
+              const pos = order.indexOf(id);
+              const placed = pos >= 0;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => toggle(id)}
+                  className={`flex w-full items-center gap-2 rounded border px-3 py-2 text-left text-sm transition-colors ${
+                    placed
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:bg-secondary"
+                  }`}
+                >
+                  <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold tabular-nums ${placed ? "bg-primary text-primary-foreground" : "bg-secondary"}`}>
+                    {placed ? pos + 1 : "·"}
+                  </span>
+                  {colorOf(id) && (
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: colorOf(id) }} />
+                  )}
+                  <span className="flex-1 truncate font-medium">{nameOf(id)}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-border bg-secondary/20 px-3 py-2 text-xs">
+            <span className="text-muted-foreground">
+              {presentIds.length === 0
+                ? "Waiting for participants"
+                : `Click in finish order (${order.length}/${presentIds.length})`}
+            </span>
+            <div className="flex gap-1">
+              <Button size="sm" variant="ghost" onClick={clearLocal} disabled={order.length === 0}>
+                Clear
+              </Button>
+              <Button size="sm" onClick={record} disabled={!allReady || presentIds.length === 0}>
+                Record
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
 
