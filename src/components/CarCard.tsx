@@ -1,17 +1,41 @@
+/**
+ * @file CarCard.tsx
+ * @description Card component displaying a diecast car with its details.
+ * Shows car photo, specs, team membership, and driver information.
+ */
+
 import type { Car } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Car as CarIcon } from "lucide-react";
 import { useLocalStorage } from "@/lib/storage";
 import type { Team } from "@/lib/types";
 
+/**
+ * Displays a diecast car as an interactive card.
+ * 
+ * Shows:
+ * - Car photo (or placeholder icon if no photo)
+ * - Brand badge
+ * - Car name, make, and model
+ * - Team membership badges
+ * - Driver name
+ * - Weight
+ * 
+ * @param car The car to display
+ * @param onClick Optional click handler (makes card clickable if provided)
+ * @param selected Whether this car is currently selected
+ */
 export function CarCard({ car, onClick, selected }: { car: Car; onClick?: () => void; selected?: boolean }) {
+  // Load teams to show team membership
   const [teams] = useLocalStorage<Team[]>("pitlane.teams", []);
   const memberOf = teams.filter((t) => t.carIds.includes(car.id));
+  
   return (
     <Card
       onClick={onClick}
       className={`group overflow-hidden p-0 shadow-[var(--shadow-card)] transition-all ${onClick ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-[var(--shadow-elegant)]" : ""} ${selected ? "ring-2 ring-primary" : ""}`}
     >
+      {/* Car photo section */}
       <div className="relative aspect-[4/3] bg-secondary">
         {car.photo ? (
           <img src={car.photo} alt={car.name} className="h-full w-full object-cover" />
@@ -20,15 +44,23 @@ export function CarCard({ car, onClick, selected }: { car: Car; onClick?: () => 
             <CarIcon className="h-10 w-10" />
           </div>
         )}
+        {/* Brand badge */}
         <div className="absolute right-2 top-2 rounded-md bg-background/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
           {car.brand}
         </div>
       </div>
+      
+      {/* Car details */}
       <div className="p-3">
+        {/* Name */}
         <div className="font-semibold leading-tight">{car.name}</div>
+        
+        {/* Make and model */}
         <div className="mt-0.5 text-xs text-muted-foreground">
           {[car.make, car.model].filter(Boolean).join(" ") || "—"}
         </div>
+        
+        {/* Team membership badges */}
         {memberOf.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {memberOf.map((t) => (
@@ -39,10 +71,14 @@ export function CarCard({ car, onClick, selected }: { car: Car; onClick?: () => 
             ))}
           </div>
         )}
+        
+        {/* Driver name */}
         <div className="mt-2 flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Driver</span>
           <span className="font-medium">{car.driver || "—"}</span>
         </div>
+        
+        {/* Weight in grams */}
         {car.weightG ? (
           <div className="mt-1 flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Weight</span>

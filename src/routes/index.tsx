@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+/**\n * @file index.tsx\n * @description Home/landing page for the Pit Lane application.\n * Displays overview stats, quick links to main features, and data backup information.\n */\n\nimport { createFileRoute } from \"@tanstack/react-router\";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";

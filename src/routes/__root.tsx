@@ -1,3 +1,9 @@
+/**
+ * @file __root.tsx
+ * @description Root route component for the application.
+ * Sets up the app shell with theming, error handling, and global context providers.
+ */
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -15,6 +21,10 @@ import { ThemeProvider, useTheme } from "@/components/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { getThemeInitScript } from "@/lib/theme";
 
+/**
+ * Error page component displayed when a route doesn't exist (404).
+ * Shows a friendly 404 message with navigation options.
+ */
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -37,6 +47,10 @@ function NotFoundComponent() {
   );
 }
 
+/**
+ * Error page component displayed when an error occurs during rendering.
+ * Shows error message with options to retry or return home.
+ */
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
@@ -72,6 +86,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+/**
+ * Root route configuration.
+ * Provides QueryClient context to all routes and defines error/not-found handlers.
+ */
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
@@ -97,10 +115,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+/**
+ * Root shell component rendered on the server.
+ * Sets up the HTML structure with theme initialization script.
+ */
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Synchronous theme setup script prevents flash of wrong theme */}
         <script dangerouslySetInnerHTML={{ __html: getThemeInitScript() }} />
         <HeadContent />
       </head>
@@ -112,6 +135,10 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Root component with global providers.
+ * Wraps the app with QueryClientProvider and ThemeProvider for state management.
+ */
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -124,19 +151,30 @@ function RootComponent() {
   );
 }
 
+/**
+ * Main app frame with layout.
+ * Contains site header, banner, and route outlet.
+ */
 function AppFrame() {
   const { resolvedTheme } = useTheme();
 
   return (
     <>
       <div className="min-h-screen bg-background text-foreground">
+        {/* Top navigation bar */}
         <SiteHeader />
+        
+        {/* Info banner with beta notice */}
         <Banner 
           type="info"
           message="Welcome to the Open Beta - Please feel free to use the feedback link at the top of the page."
         />
+        
+        {/* Page content from current route */}
         <Outlet />
       </div>
+      
+      {/* Toast notification system */}
       <Toaster richColors position="top-center" theme={resolvedTheme} />
     </>
   );
