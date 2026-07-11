@@ -1,7 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
-import type { WebSocket } from "@fastify/websocket";
 import pg from "pg";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -149,7 +148,15 @@ app.put("/snapshot", async (req, reply) => {
 });
 
 // --- websocket ----------------------------------------------------------
-const sockets = new Map<number, Set<WebSocket>>();
+// A minimal shape of the WS interface we use — avoids depending on a
+// specific `@fastify/websocket` export path across versions.
+interface WsLike {
+  send: (data: string) => void;
+  close: (code?: number, reason?: string) => void;
+  on: (event: "close", cb: () => void) => void;
+}
+
+const sockets = new Map<number, Set<WsLike>>();
 
 function broadcast(userId: number, payload: Record<string, unknown>) {
   const set = sockets.get(userId);
@@ -169,15 +176,16 @@ app.register(async (fastify) => {
       socket.close(4001, "unauthorized");
       return;
     }
-    const set = sockets.get(payload.uid) ?? new Set<WebSocket>();
-    set.add(socket);
+    const set = sockets.get(payload.uid) ?? new Set<WsLike>();
+    const s = socket as unknown as WsLike;
+    set.add(s);
     sockets.set(payload.uid, set);
-    socket.send(JSON.stringify({ type: "hello", version: VERSION }));
-    socket.on("close", () => {
-      const s = sockets.get(payload.uid);
-      if (!s) return;
-      s.delete(socket);
-      if (s.size === 0) sockets.delete(payload.uid);
+    s.send(JSON.stringify({ type: "hello", version: VERSION }));
+    s.on("close", () => {
+      const bucket = sockets.get(payload.uid);
+      if (!bucket) return;
+      bucket.delete(s);
+      if (bucket.size === 0) sockets.delete(payload.uid);
     });
   });
 });
