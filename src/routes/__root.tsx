@@ -20,6 +20,7 @@ import Banner from "@/components/Banner";
 import { ThemeProvider, useTheme } from "@/components/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { getThemeInitScript } from "@/lib/theme";
+import { ServerSync } from "@/lib/data/ServerSync";
 
 /**
  * Error page component displayed when a route doesn't exist (404).
@@ -161,6 +162,9 @@ function AppFrame() {
   return (
     <>
       <div className="min-h-screen bg-background text-foreground">
+        {/* Optional self-hosted server sync (no-op when not configured) */}
+        <ServerSync />
+
         {/* Top navigation bar */}
         <SiteHeader />
         

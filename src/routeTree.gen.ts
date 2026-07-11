@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TeamsRouteImport } from './routes/teams'
+import { Route as ServerConnectRouteImport } from './routes/server-connect'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as GarageRouteImport } from './routes/garage'
 import { Route as BackupRouteImport } from './routes/backup'
@@ -20,6 +21,11 @@ import { Route as TournamentsIdRouteImport } from './routes/tournaments.$id'
 const TeamsRoute = TeamsRouteImport.update({
   id: '/teams',
   path: '/teams',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServerConnectRoute = ServerConnectRouteImport.update({
+  id: '/server-connect',
+  path: '/server-connect',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeaderboardRoute = LeaderboardRouteImport.update({
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/backup': typeof BackupRoute
   '/garage': typeof GarageRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/server-connect': typeof ServerConnectRoute
   '/teams': typeof TeamsRoute
   '/tournaments/$id': typeof TournamentsIdRoute
   '/tournaments/': typeof TournamentsIndexRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/backup': typeof BackupRoute
   '/garage': typeof GarageRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/server-connect': typeof ServerConnectRoute
   '/teams': typeof TeamsRoute
   '/tournaments/$id': typeof TournamentsIdRoute
   '/tournaments': typeof TournamentsIndexRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/backup': typeof BackupRoute
   '/garage': typeof GarageRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/server-connect': typeof ServerConnectRoute
   '/teams': typeof TeamsRoute
   '/tournaments/$id': typeof TournamentsIdRoute
   '/tournaments/': typeof TournamentsIndexRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/backup'
     | '/garage'
     | '/leaderboard'
+    | '/server-connect'
     | '/teams'
     | '/tournaments/$id'
     | '/tournaments/'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/backup'
     | '/garage'
     | '/leaderboard'
+    | '/server-connect'
     | '/teams'
     | '/tournaments/$id'
     | '/tournaments'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/backup'
     | '/garage'
     | '/leaderboard'
+    | '/server-connect'
     | '/teams'
     | '/tournaments/$id'
     | '/tournaments/'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   BackupRoute: typeof BackupRoute
   GarageRoute: typeof GarageRoute
   LeaderboardRoute: typeof LeaderboardRoute
+  ServerConnectRoute: typeof ServerConnectRoute
   TeamsRoute: typeof TeamsRoute
   TournamentsIdRoute: typeof TournamentsIdRoute
   TournamentsIndexRoute: typeof TournamentsIndexRoute
@@ -128,6 +141,13 @@ declare module '@tanstack/react-router' {
       path: '/teams'
       fullPath: '/teams'
       preLoaderRoute: typeof TeamsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/server-connect': {
+      id: '/server-connect'
+      path: '/server-connect'
+      fullPath: '/server-connect'
+      preLoaderRoute: typeof ServerConnectRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leaderboard': {
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   BackupRoute: BackupRoute,
   GarageRoute: GarageRoute,
   LeaderboardRoute: LeaderboardRoute,
+  ServerConnectRoute: ServerConnectRoute,
   TeamsRoute: TeamsRoute,
   TournamentsIdRoute: TournamentsIdRoute,
   TournamentsIndexRoute: TournamentsIndexRoute,
@@ -187,13 +208,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -7,6 +7,7 @@
 import { Link } from "@tanstack/react-router";
 import { Flag } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ServerStatusPill } from "@/components/ServerStatusPill";
 
 /**
  * Site header component with navigation.
@@ -42,6 +43,7 @@ export function SiteHeader() {
             <NavLink to="/leaderboard">Leaderboard</NavLink>
             <NavLink to="/backup">Backup</NavLink>
           </nav>
+          <ServerStatusPill />
           <ThemeToggle />
         </div>
       </div>
