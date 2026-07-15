@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,7 +15,9 @@ import {
 import { useLocalStorage } from "@/lib/storage";
 import type { Car, Tournament, Team } from "@/lib/types";
 import { exportBackupZip, importBackupZip, downloadBlob, BackupValidationError } from "@/lib/backup";
-import { Download, Upload, Database, AlertTriangle } from "lucide-react";
+import { buildServerBundleZip } from "@/lib/data/server-bundle";
+import { useServerConfig, writeServerConfig } from "@/lib/data/server-config";
+import { Download, Upload, Database, AlertTriangle, Cloud, CloudOff, Server, LogOut, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/backup")({
@@ -38,6 +40,29 @@ function BackupPage() {
   const [pending, setPending] = useState<{ cars: Car[]; tournaments: Tournament[]; teams: Team[]; warnings: string[] } | null>(null);
   const [mode, setMode] = useState<Mode>("replace");
   const [errorReport, setErrorReport] = useState<{ issues: string[]; warnings: string[] } | null>(null);
+  const serverCfg = useServerConfig();
+  const [downloadingBundle, setDownloadingBundle] = useState(false);
+
+  async function downloadServerBundle() {
+    setDownloadingBundle(true);
+    try {
+      const blob = await buildServerBundleZip();
+      downloadBlob(blob, "pitlane-server.zip");
+      toast.success("Server bundle downloaded");
+    } catch (e) {
+      toast.error((e as Error).message || "Couldn't build server bundle");
+    } finally {
+      setDownloadingBundle(false);
+    }
+  }
+
+  function disconnectServer() {
+    writeServerConfig(null);
+    toast.success("Disconnected. Pit Lane is running on local storage.");
+  }
+
+  let serverHost = serverCfg?.url ?? "";
+  try { if (serverCfg) serverHost = new URL(serverCfg.url).host; } catch { /* ignore */ }
 
   async function doExport() {
     try {
@@ -123,6 +148,74 @@ function BackupPage() {
           </Button>
         </Card>
       </div>
+
+      <Card className="mt-4 p-5 shadow-[var(--shadow-card)]">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          {serverCfg ? (
+            <><Cloud className="h-4 w-4 text-emerald-500" /> Sync across devices</>
+          ) : (
+            <><CloudOff className="h-4 w-4 text-muted-foreground" /> Sync across devices</>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Optional. Run a small self-hosted server (Docker + Postgres) to share your
+          garage, teams, and live tournaments between devices.
+        </p>
+        {serverCfg ? (
+          <div className="mt-3 space-y-3">
+            <dl className="grid grid-cols-3 gap-y-1 text-sm">
+              <dt className="col-span-1 text-muted-foreground">Server</dt>
+              <dd className="col-span-2 truncate font-mono">{serverHost}</dd>
+              <dt className="col-span-1 text-muted-foreground">Signed in</dt>
+              <dd className="col-span-2 truncate">{serverCfg.email}</dd>
+            </dl>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link to="/server-connect">Manage connection</Link>
+              </Button>
+              <Button variant="destructive" size="sm" onClick={disconnectServer}>
+                <LogOut className="mr-1 h-4 w-4" /> Disconnect
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-3">
+            <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+              <li>
+                <span className="font-medium text-foreground">Download the server bundle</span> and
+                unzip it on a machine with Docker (PC, NAS, home server).
+              </li>
+              <li>
+                Copy <code className="rounded bg-secondary px-1 text-[11px]">.env.example</code> to{" "}
+                <code className="rounded bg-secondary px-1 text-[11px]">.env</code>, set a{" "}
+                <code className="rounded bg-secondary px-1 text-[11px]">JWT_SECRET</code>, then run{" "}
+                <code className="rounded bg-secondary px-1 text-[11px]">docker compose up -d</code>.
+              </li>
+              <li>Come back and open the connect wizard to sign in.</li>
+            </ol>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={downloadServerBundle} disabled={downloadingBundle}>
+                <Download className="mr-1 h-4 w-4" />
+                {downloadingBundle ? "Preparing…" : "Download server bundle"}
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/server-connect">
+                  <Server className="mr-1 h-4 w-4" /> Open connect wizard
+                </Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <a
+                  href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  HTTPS help <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
 
       <Card className="mt-4 p-5 shadow-[var(--shadow-card)]">
         <div className="text-sm font-semibold">Import</div>
