@@ -5,16 +5,25 @@
  */
 import JSZip from "jszip";
 
-import readme from "../../../server/README.md?raw";
-import dockerfile from "../../../server/Dockerfile?raw";
-import compose from "../../../server/docker-compose.yml?raw";
-import envExample from "../../../server/.env.example?raw";
-import pkg from "../../../server/package.json?raw";
-import tsconfig from "../../../server/tsconfig.json?raw";
-import indexTs from "../../../server/src/index.ts?raw";
-import schemaSql from "../../../server/src/schema.sql?raw";
+async function fetchText(path: string): Promise<string> {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`Failed to load ${path}`);
+  return await res.text();
+}
 
 export async function buildServerBundleZip(): Promise<Blob> {
+  const base = `${import.meta.env.BASE_URL || "/"}server-bundle`;
+  const [readme, dockerfile, compose, envExample, pkg, tsconfig, indexTs, schemaSql] =
+    await Promise.all([
+      fetchText(`${base}/README.md`),
+      fetchText(`${base}/Dockerfile`),
+      fetchText(`${base}/docker-compose.yml`),
+      fetchText(`${base}/env.example`),
+      fetchText(`${base}/package.json`),
+      fetchText(`${base}/tsconfig.json`),
+      fetchText(`${base}/src/index.ts`),
+      fetchText(`${base}/src/schema.sql`),
+    ]);
   const zip = new JSZip();
   const root = zip.folder("pitlane-server")!;
   root.file("README.md", readme);
