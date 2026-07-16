@@ -190,39 +190,80 @@ function BackupPage() {
             </div>
           </div>
         ) : (
-          <div className="mt-3 space-y-3">
-            <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
-              <li>
-                <span className="font-medium text-foreground">Download the server bundle</span> and
-                unzip it on a machine with Docker (PC, NAS, home server).
-              </li>
-              <li>
-                Copy <code className="rounded bg-secondary px-1 text-[11px]">.env.example</code> to{" "}
-                <code className="rounded bg-secondary px-1 text-[11px]">.env</code>, set a{" "}
-                <code className="rounded bg-secondary px-1 text-[11px]">JWT_SECRET</code>, then run{" "}
-                <code className="rounded bg-secondary px-1 text-[11px]">docker compose up -d</code>.
-              </li>
-              <li>Come back and open the connect wizard to sign in.</li>
-            </ol>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={downloadServerBundle} disabled={downloadingBundle}>
+          <div className="mt-4 space-y-4">
+            <div className="rounded-lg border border-border bg-secondary/30 p-3 text-xs">
+              <div className="font-semibold text-foreground">Before you start</div>
+              <p className="mt-1 text-muted-foreground">
+                You'll need <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noreferrer" className="underline">Docker Desktop</a> (or Docker Engine) installed on the machine that will host the server. Everything else is included in the bundle.
+              </p>
+            </div>
+
+            <InstallStep
+              n={1}
+              icon={<Download className="h-4 w-4" />}
+              title="Download the server bundle"
+              desc="A small ZIP with Docker Compose, the API, and the database schema."
+            >
+              <Button onClick={downloadServerBundle} disabled={downloadingBundle} size="sm">
                 <Download className="mr-1 h-4 w-4" />
-                {downloadingBundle ? "Preparing…" : "Download server bundle"}
+                {downloadingBundle ? "Preparing…" : "Download pitlane-server.zip"}
               </Button>
-              <Button asChild variant="outline">
+            </InstallStep>
+
+            <InstallStep
+              n={2}
+              icon={<HardDrive className="h-4 w-4" />}
+              title="Unzip it on your host machine"
+              desc="A PC, laptop, NAS, or home server that stays on when you want to sync. Open a terminal inside the unzipped pitlane-server folder."
+            />
+
+            <InstallStep
+              n={3}
+              icon={<Terminal className="h-4 w-4" />}
+              title="Create your .env file"
+              desc="Copy the example and set a long random JWT_SECRET (32+ characters)."
+            >
+              <CopyLine text="cp .env.example .env" id="cp" copied={copied === "cp"} onCopy={() => copyCmd("cp .env.example .env", "cp")} />
+              <p className="text-[11px] text-muted-foreground">
+                Then open <code className="rounded bg-secondary px-1">.env</code> and replace <code className="rounded bg-secondary px-1">JWT_SECRET</code> with a random string.
+              </p>
+            </InstallStep>
+
+            <InstallStep
+              n={4}
+              icon={<Server className="h-4 w-4" />}
+              title="Start the server"
+              desc="Docker will pull Postgres, build the API, and start both."
+            >
+              <CopyLine text="docker compose up -d" id="up" copied={copied === "up"} onCopy={() => copyCmd("docker compose up -d", "up")} />
+              <p className="text-[11px] text-muted-foreground">
+                Verify it's running: <code className="rounded bg-secondary px-1">curl http://localhost:8787/health</code>
+              </p>
+            </InstallStep>
+
+            <InstallStep
+              n={5}
+              icon={<Plug className="h-4 w-4" />}
+              title="Connect Pit Lane"
+              desc="Open the wizard, paste your server URL, and create your account."
+            >
+              <Button asChild size="sm">
                 <Link to="/server-connect">
-                  <Server className="mr-1 h-4 w-4" /> Open connect wizard
+                  <Plug className="mr-1 h-4 w-4" /> Open connect wizard
                 </Link>
               </Button>
-              <Button asChild variant="ghost" size="sm">
-                <a
-                  href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  HTTPS help <ExternalLink className="ml-1 h-3 w-3" />
-                </a>
-              </Button>
+            </InstallStep>
+
+            <div className="flex items-center justify-between rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+              <span>Accessing from another network or over HTTPS?</span>
+              <a
+                href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-medium text-foreground hover:underline"
+              >
+                Cloudflare Tunnel guide <ExternalLink className="h-3 w-3" />
+              </a>
             </div>
           </div>
         )}
