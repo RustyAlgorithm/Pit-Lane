@@ -17,7 +17,7 @@ import type { Car, Tournament, Team } from "@/lib/types";
 import { exportBackupZip, importBackupZip, downloadBlob, BackupValidationError } from "@/lib/backup";
 import { buildServerBundleZip } from "@/lib/data/server-bundle";
 import { useServerConfig, writeServerConfig } from "@/lib/data/server-config";
-import { Download, Upload, Database, AlertTriangle, Cloud, CloudOff, Server, LogOut, ExternalLink } from "lucide-react";
+import { Download, Upload, Database, AlertTriangle, Cloud, CloudOff, Server, LogOut, ExternalLink, Copy, Check, Terminal, HardDrive, Plug } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/backup")({
@@ -42,6 +42,17 @@ function BackupPage() {
   const [errorReport, setErrorReport] = useState<{ issues: string[]; warnings: string[] } | null>(null);
   const serverCfg = useServerConfig();
   const [downloadingBundle, setDownloadingBundle] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  async function copyCmd(cmd: string, id: string) {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopied(id);
+      setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500);
+    } catch {
+      toast.error("Couldn't copy — copy manually");
+    }
+  }
 
   async function downloadServerBundle() {
     setDownloadingBundle(true);
