@@ -358,3 +358,58 @@ function BackupPage() {
     </main>
   );
 }
+
+function InstallStep({
+  n,
+  icon,
+  title,
+  desc,
+  children,
+}: {
+  n: number;
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+        {n}
+      </div>
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <span className="text-muted-foreground">{icon}</span>
+          {title}
+        </div>
+        <p className="text-xs text-muted-foreground">{desc}</p>
+        {children && <div className="space-y-2 pt-1">{children}</div>}
+      </div>
+    </div>
+  );
+}
+
+function CopyLine({
+  text,
+  copied,
+  onCopy,
+}: {
+  text: string;
+  id: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border bg-secondary/50 px-2 py-1.5">
+      <code className="flex-1 truncate font-mono text-[12px] text-foreground">{text}</code>
+      <button
+        type="button"
+        onClick={onCopy}
+        className="inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-foreground"
+        aria-label="Copy command"
+      >
+        {copied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
+      </button>
+    </div>
+  );
+}
