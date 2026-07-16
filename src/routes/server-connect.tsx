@@ -261,34 +261,84 @@ function StepIndicator({ step }: { step: Step }) {
 }
 
 function InstallStep({ onNext }: { onNext: () => void }) {
-  const compose = `# Save the pitlane-server repo, then in that folder:
-cp .env.example .env
-# edit .env and set JWT_SECRET to a long random string
-docker compose up -d
-# Server is now on http://<your-host>:8787`;
-
-  function copy() {
-    void navigator.clipboard.writeText(compose);
+  function copyCmd(cmd: string) {
+    void navigator.clipboard.writeText(cmd);
     toast.success("Copied to clipboard");
   }
 
+  const steps: { title: string; body: React.ReactNode; cmd?: string }[] = [
+    {
+      title: "Install Docker Desktop",
+      body: (
+        <>Download and install{" "}
+          <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noreferrer" className="underline">
+            Docker Desktop
+          </a>{" "}on the machine that will host the server (your PC, Mac, or NAS). Make sure it's running before continuing.</>
+      ),
+    },
+    {
+      title: "Download the server bundle",
+      body: (
+        <>Go to the <strong>Backup</strong> page in Pit Lane and click <em>Download server bundle</em>. Unzip it on the host machine — you'll get a <code className="rounded bg-secondary px-1 text-[11px]">pitlane-server</code> folder.</>
+      ),
+    },
+    {
+      title: "Open a terminal in that folder",
+      body: <>On Windows use PowerShell; on macOS/Linux use Terminal. Then <code className="rounded bg-secondary px-1 text-[11px]">cd</code> into the unzipped <code className="rounded bg-secondary px-1 text-[11px]">pitlane-server</code> folder.</>,
+    },
+    {
+      title: "Create your .env file",
+      body: <>Copy the example env file, then open <code className="rounded bg-secondary px-1 text-[11px]">.env</code> in a text editor and change <code className="rounded bg-secondary px-1 text-[11px]">JWT_SECRET</code> to a long random string.</>,
+      cmd: "cp .env.example .env",
+    },
+    {
+      title: "Start the server",
+      body: <>Docker will pull Postgres and build the API. First run takes a minute or two.</>,
+      cmd: "docker compose up -d",
+    },
+    {
+      title: "Confirm it's running",
+      body: <>You should see <code className="rounded bg-secondary px-1 text-[11px]">{`{"ok":true}`}</code>. The server URL you'll paste in the next step is <code className="rounded bg-secondary px-1 text-[11px]">http://&lt;host&gt;:8787</code>.</>,
+      cmd: "curl http://localhost:8787/health",
+    },
+  ];
+
   return (
     <Card className="mt-6 space-y-4 p-5">
-      <div className="space-y-2 text-sm">
+      <div className="space-y-1 text-sm">
         <p className="font-semibold text-foreground">Install the companion server</p>
         <p className="text-muted-foreground">
-          Requires Docker. The full source lives in the <code className="rounded bg-secondary px-1 text-[11px]">server/</code> folder
-          of the Pit Lane repository — copy it to a machine on your network and run:
+          Follow these steps on the machine that will host the server. It doesn't need to be this device — any always-on computer on your network works.
         </p>
       </div>
-      <div className="relative">
-        <pre className="max-h-48 overflow-auto rounded-md border border-border bg-secondary/40 p-3 text-xs">
-{compose}
-        </pre>
-        <Button size="sm" variant="ghost" onClick={copy} className="absolute right-1 top-1 h-7 gap-1 px-2 text-xs">
-          <Copy className="h-3 w-3" /> Copy
-        </Button>
-      </div>
+
+      <ol className="space-y-3">
+        {steps.map((s, i) => (
+          <li key={i} className="flex gap-3 rounded-md border border-border bg-secondary/20 p-3">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+              {i + 1}
+            </div>
+            <div className="min-w-0 flex-1 space-y-2 text-sm">
+              <div className="font-medium text-foreground">{s.title}</div>
+              <div className="text-muted-foreground">{s.body}</div>
+              {s.cmd && (
+                <div className="relative">
+                  <pre className="overflow-auto rounded border border-border bg-background px-2 py-1.5 pr-14 text-xs font-mono">{s.cmd}</pre>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => copyCmd(s.cmd!)}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-6 gap-1 px-2 text-[11px]"
+                  >
+                    <Copy className="h-3 w-3" /> Copy
+                  </Button>
+                </div>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+
       <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
         <div className="flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-300">
           <Terminal className="h-3.5 w-3.5" /> HTTPS note
