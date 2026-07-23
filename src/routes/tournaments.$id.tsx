@@ -1077,6 +1077,7 @@ function TimeTrialView({
 }
 
 function HeatsView({
+  // placeholder anchor
   t,
   cars,
   teams,
