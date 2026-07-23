@@ -758,6 +758,57 @@ function TimeTrialView({
   const times = t.times ?? [];
   const unit = t.trackUnit ?? "cm";
 
+  // ----- Pi timer integration -----
+  interface TimerSettings {
+    url: string;
+    enabled: boolean;
+    autoRecord: boolean;
+    laneMap: Record<string, string>; // lane number -> carId
+  }
+  interface Unassigned { id: string; ms: number; lane: number | null; ts: number }
+  const [timerCfg, setTimerCfg] = useLocalStorage<TimerSettings>(
+    `pitlane.timer.${t.id}`,
+    { url: "ws://pitlane-timer.local:8790", enabled: false, autoRecord: true, laneMap: {} },
+  );
+  const [unassigned, setUnassigned] = useState<Unassigned[]>([]);
+
+  function recordSeconds(carId: string, seconds: number) {
+    const entry: TimeEntry = { id: uid(), carId, seconds, recordedAt: Date.now() };
+    onChange((prev) => recomputeTTChampion({ ...prev, times: [...(prev.times ?? []), entry] }));
+  }
+
+  const { status: timerStatus, lastEvent } = useTimer(
+    timerCfg.enabled ? timerCfg.url : null,
+    (e: LapEvent) => {
+      const seconds = e.ms / 1000;
+      const laneKey = e.lane != null ? String(e.lane) : "";
+      const mappedCar = laneKey ? timerCfg.laneMap[laneKey] : undefined;
+      if (mappedCar && timerCfg.autoRecord && roster.some((c) => c.id === mappedCar)) {
+        recordSeconds(mappedCar, seconds);
+        toast.success(`Lane ${laneKey}: ${seconds.toFixed(3)}s`);
+        return;
+      }
+      setUnassigned((u) => [...u, { id: uid(), ms: e.ms, lane: e.lane, ts: e.ts }]);
+    },
+  );
+
+  function assignUnassigned(id: string, carId: string) {
+    const item = unassigned.find((u) => u.id === id);
+    if (!item || !carId) return;
+    recordSeconds(carId, item.ms / 1000);
+    setUnassigned((u) => u.filter((x) => x.id !== id));
+  }
+
+  function discardUnassigned(id: string) {
+    setUnassigned((u) => u.filter((x) => x.id !== id));
+  }
+
+  // Lanes currently known: whatever the user has mapped + the last event's lane
+  const knownLanes = Array.from(new Set([
+    ...Object.keys(timerCfg.laneMap),
+    ...(lastEvent?.lane != null ? [String(lastEvent.lane)] : []),
+  ])).sort((a, b) => Number(a) - Number(b));
+
   function addTime() {
     const sec = Number(secondsInput);
     if (!selectedCarId) return;
