@@ -1076,6 +1076,22 @@ function TimeTrialView({
   );
 }
 
+function TimerStatusDot({ status }: { status: TimerStatus }) {
+  const map: Record<TimerStatus, { cls: string; label: string }> = {
+    offline: { cls: "bg-muted-foreground/40", label: "Offline" },
+    connecting: { cls: "bg-amber-500 animate-pulse", label: "Connecting" },
+    live: { cls: "bg-green-500", label: "Live" },
+    reconnecting: { cls: "bg-amber-500 animate-pulse", label: "Reconnecting" },
+    error: { cls: "bg-destructive", label: "Error" },
+  };
+  const { cls, label } = map[status];
+  return (
+    <span className="ml-1 inline-flex items-center gap-1 text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
+      <span className={`h-2 w-2 rounded-full ${cls}`} /> {label}
+    </span>
+  );
+}
+
 function HeatsView({
   t,
   cars,
