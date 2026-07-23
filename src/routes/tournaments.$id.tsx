@@ -9,7 +9,13 @@ import { TournamentCertificateDialog } from "@/components/TournamentCertificateD
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download, Dices } from "lucide-react";
+import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download, Dices, Radio, Plug, PlugZap, HelpCircle } from "lucide-react";
+import { useTimer, type LapEvent, type TimerStatus } from "@/lib/timer/useTimer";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -736,6 +742,7 @@ function TimeTrialView({
   onChange: (updater: (prev: Tournament) => Tournament) => void;
 }) {
   const isTeams = t.participationType === "teams";
+  // TimerStatusDot is defined below.
   
   // Get roster: for car tournaments use carIds directly, for team tournaments get cars from team members
   const allRosterCars = isTeams
@@ -751,6 +758,57 @@ function TimeTrialView({
   const roster = allRosterCars;
   const times = t.times ?? [];
   const unit = t.trackUnit ?? "cm";
+
+  // ----- Pi timer integration -----
+  interface TimerSettings {
+    url: string;
+    enabled: boolean;
+    autoRecord: boolean;
+    laneMap: Record<string, string>; // lane number -> carId
+  }
+  interface Unassigned { id: string; ms: number; lane: number | null; ts: number }
+  const [timerCfg, setTimerCfg] = useLocalStorage<TimerSettings>(
+    `pitlane.timer.${t.id}`,
+    { url: "ws://pitlane-timer.local:8790", enabled: false, autoRecord: true, laneMap: {} },
+  );
+  const [unassigned, setUnassigned] = useState<Unassigned[]>([]);
+
+  function recordSeconds(carId: string, seconds: number) {
+    const entry: TimeEntry = { id: uid(), carId, seconds, recordedAt: Date.now() };
+    onChange((prev) => recomputeTTChampion({ ...prev, times: [...(prev.times ?? []), entry] }));
+  }
+
+  const { status: timerStatus, lastEvent } = useTimer(
+    timerCfg.enabled ? timerCfg.url : null,
+    (e: LapEvent) => {
+      const seconds = e.ms / 1000;
+      const laneKey = e.lane != null ? String(e.lane) : "";
+      const mappedCar = laneKey ? timerCfg.laneMap[laneKey] : undefined;
+      if (mappedCar && timerCfg.autoRecord && roster.some((c) => c.id === mappedCar)) {
+        recordSeconds(mappedCar, seconds);
+        toast.success(`Lane ${laneKey}: ${seconds.toFixed(3)}s`);
+        return;
+      }
+      setUnassigned((u) => [...u, { id: uid(), ms: e.ms, lane: e.lane, ts: e.ts }]);
+    },
+  );
+
+  function assignUnassigned(id: string, carId: string) {
+    const item = unassigned.find((u) => u.id === id);
+    if (!item || !carId) return;
+    recordSeconds(carId, item.ms / 1000);
+    setUnassigned((u) => u.filter((x) => x.id !== id));
+  }
+
+  function discardUnassigned(id: string) {
+    setUnassigned((u) => u.filter((x) => x.id !== id));
+  }
+
+  // Lanes currently known: whatever the user has mapped + the last event's lane
+  const knownLanes = Array.from(new Set([
+    ...Object.keys(timerCfg.laneMap),
+    ...(lastEvent?.lane != null ? [String(lastEvent.lane)] : []),
+  ])).sort((a, b) => Number(a) - Number(b));
 
   function addTime() {
     const sec = Number(secondsInput);
@@ -825,6 +883,45 @@ function TimeTrialView({
           </div>
         </Card>
 
+        {unassigned.length > 0 && (
+          <>
+            <h2 className="mb-3 mt-6 flex items-center gap-2 text-sm font-bold uppercase tracking-wider">
+              <Radio className="h-4 w-4 text-primary" /> Unassigned times ({unassigned.length})
+            </h2>
+            <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
+              {unassigned.map((u) => (
+                <div
+                  key={u.id}
+                  className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 border-b border-border px-3 py-2 text-sm last:border-b-0"
+                >
+                  <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {u.lane != null ? `Lane ${u.lane}` : "No lane"}
+                  </span>
+                  <span className="font-semibold tabular-nums">{(u.ms / 1000).toFixed(3)}s</span>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => { if (e.target.value) assignUnassigned(u.id, e.target.value); }}
+                    className="h-8 rounded-md border border-input bg-transparent px-2 text-xs"
+                  >
+                    <option value="">Assign to…</option>
+                    {roster.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => discardUnassigned(u.id)}
+                    className="text-muted-foreground hover:text-destructive"
+                    aria-label="Discard"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </Card>
+          </>
+        )}
+
         <h2 className="mb-3 mt-6 text-sm font-bold uppercase tracking-wider">All runs</h2>
         {times.length === 0 ? (
           <div className="rounded-lg border-2 border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -859,6 +956,100 @@ function TimeTrialView({
       </div>
 
       <div>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider">
+          <Radio className="h-4 w-4" /> Pi timer
+          <TimerStatusDot status={timerStatus} />
+        </h2>
+        <Card className="mb-6 p-4 shadow-[var(--shadow-card)]">
+          <div className="grid gap-2">
+            <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              WebSocket URL
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="Help">
+                    <HelpCircle className="h-3.5 w-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 text-xs">
+                  <p className="font-semibold text-foreground">Can't connect?</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Browsers block plain <code>ws://</code> from an HTTPS page. If the timer
+                    URL starts with <code>ws://</code>, either open Pit Lane at
+                    <code> http://localhost</code>, or put the Pi behind a Cloudflare Tunnel /
+                    self-signed cert so it's reachable as <code>wss://…</code>.
+                  </p>
+                </PopoverContent>
+              </Popover>
+            </label>
+            <Input
+              value={timerCfg.url}
+              onChange={(e) => setTimerCfg({ ...timerCfg, url: e.target.value })}
+              placeholder="ws://pitlane-timer.local:8790"
+              disabled={timerCfg.enabled}
+            />
+            <Button
+              variant={timerCfg.enabled ? "outline" : "default"}
+              size="sm"
+              onClick={() => setTimerCfg({ ...timerCfg, enabled: !timerCfg.enabled })}
+            >
+              {timerCfg.enabled ? (<><Plug className="mr-1.5 h-3.5 w-3.5" /> Disconnect</>) : (<><PlugZap className="mr-1.5 h-3.5 w-3.5" /> Connect</>)}
+            </Button>
+            <label className="mt-1 flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={timerCfg.autoRecord}
+                onChange={(e) => setTimerCfg({ ...timerCfg, autoRecord: e.target.checked })}
+              />
+              Auto-record mapped lanes (uncheck to review each time)
+            </label>
+
+            {knownLanes.length > 0 && (
+              <div className="mt-2 border-t border-border pt-2">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Lane → Car
+                </div>
+                {knownLanes.map((lane) => (
+                  <div key={lane} className="mb-1 grid grid-cols-[70px_1fr_auto] items-center gap-2 text-xs">
+                    <span className="font-semibold">Lane {lane}</span>
+                    <select
+                      value={timerCfg.laneMap[lane] ?? ""}
+                      onChange={(e) => setTimerCfg({
+                        ...timerCfg,
+                        laneMap: { ...timerCfg.laneMap, [lane]: e.target.value },
+                      })}
+                      className="h-8 rounded-md border border-input bg-transparent px-2"
+                    >
+                      <option value="">— unmapped —</option>
+                      {roster.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    {timerCfg.laneMap[lane] && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = { ...timerCfg.laneMap };
+                          delete next[lane];
+                          setTimerCfg({ ...timerCfg, laneMap: next });
+                        }}
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label="Clear mapping"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {timerCfg.enabled && knownLanes.length === 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Waiting for the timer to send its first event. Lanes appear here once seen.
+              </p>
+            )}
+          </div>
+        </Card>
+
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">Leaderboard</h2>
         <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
           <div className="grid grid-cols-[28px_1fr_auto] gap-2 border-b border-border bg-secondary/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -882,6 +1073,22 @@ function TimeTrialView({
         </Card>
       </div>
     </div>
+  );
+}
+
+function TimerStatusDot({ status }: { status: TimerStatus }) {
+  const map: Record<TimerStatus, { cls: string; label: string }> = {
+    offline: { cls: "bg-muted-foreground/40", label: "Offline" },
+    connecting: { cls: "bg-amber-500 animate-pulse", label: "Connecting" },
+    live: { cls: "bg-green-500", label: "Live" },
+    reconnecting: { cls: "bg-amber-500 animate-pulse", label: "Reconnecting" },
+    error: { cls: "bg-destructive", label: "Error" },
+  };
+  const { cls, label } = map[status];
+  return (
+    <span className="ml-1 inline-flex items-center gap-1 text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
+      <span className={`h-2 w-2 rounded-full ${cls}`} /> {label}
+    </span>
   );
 }
 
