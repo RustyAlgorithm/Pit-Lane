@@ -742,6 +742,7 @@ function TimeTrialView({
   onChange: (updater: (prev: Tournament) => Tournament) => void;
 }) {
   const isTeams = t.participationType === "teams";
+  // TimerStatusDot is defined below.
   
   // Get roster: for car tournaments use carIds directly, for team tournaments get cars from team members
   const allRosterCars = isTeams
