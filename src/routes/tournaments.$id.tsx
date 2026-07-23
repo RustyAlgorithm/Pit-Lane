@@ -9,7 +9,13 @@ import { TournamentCertificateDialog } from "@/components/TournamentCertificateD
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download, Dices } from "lucide-react";
+import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download, Dices, Radio, Plug, PlugZap, HelpCircle } from "lucide-react";
+import { useTimer, type LapEvent, type TimerStatus } from "@/lib/timer/useTimer";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
