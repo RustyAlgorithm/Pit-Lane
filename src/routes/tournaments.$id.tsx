@@ -882,6 +882,45 @@ function TimeTrialView({
           </div>
         </Card>
 
+        {unassigned.length > 0 && (
+          <>
+            <h2 className="mb-3 mt-6 flex items-center gap-2 text-sm font-bold uppercase tracking-wider">
+              <Radio className="h-4 w-4 text-primary" /> Unassigned times ({unassigned.length})
+            </h2>
+            <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
+              {unassigned.map((u) => (
+                <div
+                  key={u.id}
+                  className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 border-b border-border px-3 py-2 text-sm last:border-b-0"
+                >
+                  <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {u.lane != null ? `Lane ${u.lane}` : "No lane"}
+                  </span>
+                  <span className="font-semibold tabular-nums">{(u.ms / 1000).toFixed(3)}s</span>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => { if (e.target.value) assignUnassigned(u.id, e.target.value); }}
+                    className="h-8 rounded-md border border-input bg-transparent px-2 text-xs"
+                  >
+                    <option value="">Assign to…</option>
+                    {roster.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => discardUnassigned(u.id)}
+                    className="text-muted-foreground hover:text-destructive"
+                    aria-label="Discard"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </Card>
+          </>
+        )}
+
         <h2 className="mb-3 mt-6 text-sm font-bold uppercase tracking-wider">All runs</h2>
         {times.length === 0 ? (
           <div className="rounded-lg border-2 border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -916,6 +955,100 @@ function TimeTrialView({
       </div>
 
       <div>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider">
+          <Radio className="h-4 w-4" /> Pi timer
+          <TimerStatusDot status={timerStatus} />
+        </h2>
+        <Card className="mb-6 p-4 shadow-[var(--shadow-card)]">
+          <div className="grid gap-2">
+            <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              WebSocket URL
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="Help">
+                    <HelpCircle className="h-3.5 w-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 text-xs">
+                  <p className="font-semibold text-foreground">Can't connect?</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Browsers block plain <code>ws://</code> from an HTTPS page. If the timer
+                    URL starts with <code>ws://</code>, either open Pit Lane at
+                    <code> http://localhost</code>, or put the Pi behind a Cloudflare Tunnel /
+                    self-signed cert so it's reachable as <code>wss://…</code>.
+                  </p>
+                </PopoverContent>
+              </Popover>
+            </label>
+            <Input
+              value={timerCfg.url}
+              onChange={(e) => setTimerCfg({ ...timerCfg, url: e.target.value })}
+              placeholder="ws://pitlane-timer.local:8790"
+              disabled={timerCfg.enabled}
+            />
+            <Button
+              variant={timerCfg.enabled ? "outline" : "default"}
+              size="sm"
+              onClick={() => setTimerCfg({ ...timerCfg, enabled: !timerCfg.enabled })}
+            >
+              {timerCfg.enabled ? (<><Plug className="mr-1.5 h-3.5 w-3.5" /> Disconnect</>) : (<><PlugZap className="mr-1.5 h-3.5 w-3.5" /> Connect</>)}
+            </Button>
+            <label className="mt-1 flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={timerCfg.autoRecord}
+                onChange={(e) => setTimerCfg({ ...timerCfg, autoRecord: e.target.checked })}
+              />
+              Auto-record mapped lanes (uncheck to review each time)
+            </label>
+
+            {knownLanes.length > 0 && (
+              <div className="mt-2 border-t border-border pt-2">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Lane → Car
+                </div>
+                {knownLanes.map((lane) => (
+                  <div key={lane} className="mb-1 grid grid-cols-[70px_1fr_auto] items-center gap-2 text-xs">
+                    <span className="font-semibold">Lane {lane}</span>
+                    <select
+                      value={timerCfg.laneMap[lane] ?? ""}
+                      onChange={(e) => setTimerCfg({
+                        ...timerCfg,
+                        laneMap: { ...timerCfg.laneMap, [lane]: e.target.value },
+                      })}
+                      className="h-8 rounded-md border border-input bg-transparent px-2"
+                    >
+                      <option value="">— unmapped —</option>
+                      {roster.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    {timerCfg.laneMap[lane] && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = { ...timerCfg.laneMap };
+                          delete next[lane];
+                          setTimerCfg({ ...timerCfg, laneMap: next });
+                        }}
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label="Clear mapping"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {timerCfg.enabled && knownLanes.length === 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Waiting for the timer to send its first event. Lanes appear here once seen.
+              </p>
+            )}
+          </div>
+        </Card>
+
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">Leaderboard</h2>
         <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
           <div className="grid grid-cols-[28px_1fr_auto] gap-2 border-b border-border bg-secondary/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
