@@ -329,7 +329,7 @@ function LeaderboardPage() {
         View fastest times, car performance, and team standings.
       </p>
 
-      <div className="mt-6 flex gap-2 border-b border-border">
+      <div className="mt-6 flex gap-2 overflow-x-auto border-b border-border">
         <TabButton active={activeTab === "times"} onClick={() => setActiveTab("times")} icon={<Timer className="h-4 w-4" />}>
           Time Trial
         </TabButton>
@@ -629,7 +629,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium transition-colors ${
+      className={`shrink-0 whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
         active ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"
       }`}
     >
