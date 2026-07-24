@@ -44,14 +44,14 @@ function GaragePage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:py-12">
-      <div className="flex items-end justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Garage</h1>
           <p className="mt-1 text-sm text-muted-foreground">{cars.length} car{cars.length === 1 ? "" : "s"} in your collection</p>
         </div>
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(undefined); }}>
           <DialogTrigger asChild>
-            <Button onClick={() => setEditing(undefined)} className="shadow-[var(--shadow-elegant)]">
+            <Button onClick={() => setEditing(undefined)} className="w-full shadow-[var(--shadow-elegant)] sm:w-auto">
               <Plus className="mr-1 h-4 w-4" /> Add car
             </Button>
           </DialogTrigger>

@@ -128,14 +128,14 @@ function TeamsPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:py-12">
-      <div className="flex items-end justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Teams</h1>
           <p className="mt-1 text-sm text-muted-foreground">{teams.length} team{teams.length === 1 ? "" : "s"}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openNew} className="shadow-[var(--shadow-elegant)]">
+            <Button onClick={openNew} className="w-full shadow-[var(--shadow-elegant)] sm:w-auto">
               <Plus className="mr-1 h-4 w-4" /> New team
             </Button>
           </DialogTrigger>
