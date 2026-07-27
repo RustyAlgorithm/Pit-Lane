@@ -51,6 +51,7 @@ export function ServerSync() {
   const lastPushed = useRef<string>("");
   const initialised = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const lastPushToastAt = useRef<number>(0);
 
   // Reset when connection is dropped.
   useEffect(() => {
