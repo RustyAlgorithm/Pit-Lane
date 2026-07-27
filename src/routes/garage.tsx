@@ -71,14 +71,22 @@ function GaragePage() {
       ) : (
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cars.map((c) => (
-            <div key={c.id} className="relative">
+            <div key={c.id} className="flex flex-col overflow-hidden rounded-lg">
               <CarCard car={c} />
-              <div className="absolute right-2 bottom-2 flex gap-1">
-                <Button size="icon" variant="secondary" className="h-8 w-8 shadow-md" onClick={() => { setEditing(c); setOpen(true); }} aria-label="Edit car">
-                  <Pencil className="h-3.5 w-3.5" />
+              <div className="-mt-px grid grid-cols-2 border-t border-border">
+                <Button
+                  variant="ghost"
+                  className="h-10 rounded-none border-r border-border text-sm font-medium hover:bg-secondary"
+                  onClick={() => { setEditing(c); setOpen(true); }}
+                >
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
                 </Button>
-                <Button size="icon" variant="destructive" className="h-8 w-8 shadow-md" onClick={() => remove(c.id)} aria-label="Delete car">
-                  <Trash2 className="h-3.5 w-3.5" />
+                <Button
+                  variant="ghost"
+                  className="h-10 rounded-none text-sm font-medium text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => remove(c.id)}
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
                 </Button>
               </div>
             </div>
