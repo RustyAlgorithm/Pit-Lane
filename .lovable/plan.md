@@ -1,70 +1,34 @@
+## Problem
 
-# Raspberry Pi Timer → Pit Lane (browser LAN link)
+After saving a second car, the header pill flips to "reconnecting" even though the WebSocket is still connected (the `/server-connect` page correctly shows "connected"). The pill then stays stuck on "reconnecting".
 
-Direct browser ↔ Pi connection over your local network. No companion server required, no auth (LAN-only). Works while the Time Trial view is open in the browser.
+## Root cause
 
-## How it will work
+In `src/lib/data/ServerSync.tsx`, the push-to-server effect calls `setStatus("reconnecting")` whenever `pushSnapshot` throws for any reason other than `unauthorized`:
 
-```text
-[Pi timer box]  --WebSocket (ws://pi.local:8790)-->  [Pit Lane tab]
-   sensors                 lap events                   Time Trial view
+```ts
+} catch (err) {
+  const msg = (err as Error).message;
+  if (msg === "unauthorized") { ... }
+  else { setStatus("reconnecting"); }
+}
 ```
 
-- The Pi runs a tiny WebSocket server that emits events when a sensor fires.
-- Pit Lane's Time Trial view opens that WebSocket, listens for events, and appends runs to the active tournament automatically.
-- If a lane/sensor isn't mapped yet, the time drops into an **Unassigned times** queue where the user taps a car to assign it.
+Two problems with this:
+1. It overrides the real connection status (WS is still open, so we shouldn't claim the socket is reconnecting).
+2. Nothing ever flips it back to `"live"` — `ws.onopen` only fires on a fresh socket open, and the existing socket never closed. So the pill is stuck until the next WS drop or a page reload.
 
-## Pi event contract (what the Pi sends)
+This is also why a failing push is invisible to the user: no toast, and the misleading pill is the only signal.
 
-Small JSON, one per pass. This is the only contract the Pi has to honour — you can build the Pi firmware later in any language.
+## Fix (frontend only, `src/lib/data/ServerSync.tsx`)
 
-```json
-{ "type": "lap",       "lane": 1, "ms": 4238, "ts": 1730000000000 }
-{ "type": "run_start", "lane": 1, "ts": 1730000000000 }
-{ "type": "run_end",   "lane": 1, "ms": 4238, "ts": 1730000000000 }
-{ "type": "hello",     "device": "pitlane-timer", "version": "0.1" }
-```
+1. **Stop hijacking the WS-derived status from the push path.** Remove the `setStatus("reconnecting")` in the push `catch`. WS status stays owned by the WS lifecycle handlers.
+2. **Retry failed pushes with backoff** inside the push effect (e.g. up to 3 attempts, 500ms → 1s → 2s), so a transient PUT failure recovers instead of silently dropping the write.
+3. **Surface push failures to the user.** After retries are exhausted, show a `toast.error("Couldn't save changes to server — will retry")` (throttled so it doesn't spam) and keep `lastPushed.current` unchanged so the next local change (or the next debounce tick) will try again.
+4. **Handle `unauthorized` as today** (toast + clear server config).
 
-Pit Lane will only require `type` + `ms` + (optional) `lane`. Everything else is ignored gracefully.
+No changes to WS logic, initial-pull logic, or the pill component itself. The pill will now reflect socket state honestly, and a broken push shows as a toast rather than as a misleading "reconnecting" state.
 
-## Web app changes
+## Out of scope
 
-New settings, all client-side:
-
-1. **Timer settings panel** on the Time Trial tournament view:
-   - Timer URL input (default `ws://pitlane-timer.local:8790`), Connect / Disconnect, live status dot (offline / connecting / live).
-   - Lane → Car mapping table (one row per lane the Pi reports, dropdown of tournament roster).
-   - Toggle: *Auto-record* (add straight to the leaderboard) vs *Review first* (drop into unassigned queue).
-   - Persisted in `localStorage` under `pitlane.timer.<tournamentId>`.
-
-2. **Unassigned times queue** (in the same view): list of times received without a mapped lane, each with a "Assign to…" car picker and a discard button.
-
-3. **New hook** `src/lib/timer/useTimer.ts` — opens the WebSocket, auto-reconnects with backoff, exposes `{status, lastEvent, onLap(cb)}`.
-
-4. **Wire into existing time-trial recording** in `src/routes/tournaments.$id.tsx` — reuses the same `addTimeEntry` path the manual UI already calls, so leaderboards, backups, and championship qualifying keep working with zero changes.
-
-Nothing about tournament data model, backup schema, or the self-hosted server changes.
-
-## Mixed-content note (important, non-blocking)
-
-The Lovable-hosted app is HTTPS. Browsers block `ws://` from an HTTPS page. Two workable options, documented in the settings panel:
-
-- Run Pit Lane locally at `http://localhost` while using the timer (simplest for a garage setup).
-- Put the Pi behind a Cloudflare Tunnel or self-signed cert so it's reachable at `wss://…`.
-
-We'll surface both in a small "Can't connect?" help popover next to the Timer URL field.
-
-## Out of scope (this pass)
-
-- The actual Pi firmware / hardware code (separate project — the event contract above is the interface).
-- Server-side ingestion (not needed for browser-direct mode; can be added later if you want cross-device sync of timer events).
-- Start/finish remote control from Pi (you didn't ask for it; can be added once basic capture works).
-
-## Rollout
-
-1. `src/lib/timer/useTimer.ts` + types for the event contract.
-2. Timer settings + unassigned queue UI inside `tournaments.$id.tsx` Time Trial view.
-3. Manual smoke test with a tiny Node/Python WS script simulating the Pi.
-4. Short docs section on the Backup / server-connect area linking the event contract for whoever builds the Pi.
-
-Estimated diff: ~300 lines web, zero server changes.
+The underlying "car disappears on refresh" issue (pushes actually failing over the Cloudflare tunnel) is a separate diagnosis — this change only makes the pill honest and makes push failures visible/retried so we can see what's really happening. If pushes still fail after this, the toast will tell us the HTTP error and we can dig into CORS/tunnel config next.

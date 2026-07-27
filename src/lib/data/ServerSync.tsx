@@ -51,6 +51,7 @@ export function ServerSync() {
   const lastPushed = useRef<string>("");
   const initialised = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const lastPushToastAt = useRef<number>(0);
 
   // Reset when connection is dropped.
   useEffect(() => {
@@ -168,21 +169,40 @@ export function ServerSync() {
     const snap = JSON.stringify({ cars, teams, tournaments });
     if (snap === lastPushed.current) return;
 
+    let cancelled = false;
     const t = setTimeout(async () => {
-      try {
-        await pushSnapshot(cfg.url, cfg.token, { cars, teams, tournaments, clientId: cfg.clientId });
-        lastPushed.current = snap;
-      } catch (err) {
-        const msg = (err as Error).message;
-        if (msg === "unauthorized") {
-          toast.error("Server session expired. Please sign in again.");
-          writeServerConfig(null);
-        } else {
-          setStatus("reconnecting");
+      const delays = [0, 500, 1000, 2000];
+      let lastErr: Error | null = null;
+      for (let i = 0; i < delays.length; i++) {
+        if (cancelled) return;
+        if (delays[i] > 0) {
+          await new Promise((r) => setTimeout(r, delays[i]));
+          if (cancelled) return;
+        }
+        try {
+          await pushSnapshot(cfg.url, cfg.token, { cars, teams, tournaments, clientId: cfg.clientId });
+          lastPushed.current = snap;
+          return;
+        } catch (err) {
+          const msg = (err as Error).message;
+          if (msg === "unauthorized") {
+            toast.error("Server session expired. Please sign in again.");
+            writeServerConfig(null);
+            return;
+          }
+          lastErr = err as Error;
         }
       }
+      if (cancelled) return;
+      const now = Date.now();
+      if (now - lastPushToastAt.current > 10_000) {
+        lastPushToastAt.current = now;
+        toast.error(`Couldn't save changes to server — will retry (${lastErr?.message ?? "network error"})`);
+      }
+      // Leave lastPushed.current unchanged so the next local edit (or effect
+      // re-run) triggers another attempt.
     }, 400);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [cars, teams, tournaments, cfg]);
 
   return null;
