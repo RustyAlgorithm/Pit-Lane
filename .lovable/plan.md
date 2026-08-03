@@ -1,34 +1,51 @@
-## Problem
+# Bulk car import (CSV + photos)
 
-After saving a second car, the header pill flips to "reconnecting" even though the WebSocket is still connected (the `/server-connect` page correctly shows "connected"). The pill then stays stuck on "reconnecting".
+Add an "Import cars" button next to "Add car" in the Garage that lets you load many cars at once from a CSV file, optionally with a folder/ZIP of photos.
 
-## Root cause
+## The flow
 
-In `src/lib/data/ServerSync.tsx`, the push-to-server effect calls `setStatus("reconnecting")` whenever `pushSnapshot` throws for any reason other than `unauthorized`:
+1. Click **Import cars** in the Garage header — a dialog opens.
+2. **Download template** link gives a ready-made CSV with the right headers.
+3. Pick a CSV file (or drag it in). Optionally pick a ZIP or a set of image files for photos.
+4. A **preview table** shows every row parsed, with per-row status: new, duplicate, or error (with the reason).
+5. Choose how to handle duplicates: **Skip**, **Update existing**, or **Add as new**.
+6. Confirm — valid rows are added to the garage, and a summary toast reports added / updated / skipped / failed counts.
 
-```ts
-} catch (err) {
-  const msg = (err as Error).message;
-  if (msg === "unauthorized") { ... }
-  else { setStatus("reconnecting"); }
-}
+Nothing is written until you confirm, and rows with errors never block the good rows.
+
+## CSV format
+
+Headers (case-insensitive, order-independent; only `name` is required):
+
+```text
+name,driver,make,model,weight_g,brand,notes,photo
+Crimson Reaper,Dale Vortex,Ford,Mustang,35,Hot Wheels,Custom paint,reaper.jpg
 ```
 
-Two problems with this:
-1. It overrides the real connection status (WS is still open, so we shouldn't claim the socket is reconnecting).
-2. Nothing ever flips it back to `"live"` — `ws.onopen` only fires on a fresh socket open, and the existing socket never closed. So the pill is stuck until the next WS drop or a page reload.
+- `driver` blank → auto-generated driver name (same generator as the form).
+- `brand` unrecognised → kept as typed.
+- `weight_g` non-numeric → 0 with a row warning.
+- `photo` → filename to match inside the photos ZIP/selection.
 
-This is also why a failing push is invisible to the user: no toast, and the misleading pill is the only signal.
+## Photos
 
-## Fix (frontend only, `src/lib/data/ServerSync.tsx`)
+- Accepts a ZIP or a multi-file image selection.
+- Matching order: exact `photo` filename → filename matching the car name (slug, ignoring case/spaces).
+- Each matched image runs through the existing resize/compress pipeline (same 1600px cap as single upload), stored as a data URL.
+- Unmatched images are listed in the preview as "not used"; cars without a photo import fine.
 
-1. **Stop hijacking the WS-derived status from the push path.** Remove the `setStatus("reconnecting")` in the push `catch`. WS status stays owned by the WS lifecycle handlers.
-2. **Retry failed pushes with backoff** inside the push effect (e.g. up to 3 attempts, 500ms → 1s → 2s), so a transient PUT failure recovers instead of silently dropping the write.
-3. **Surface push failures to the user.** After retries are exhausted, show a `toast.error("Couldn't save changes to server — will retry")` (throttled so it doesn't spam) and keep `lastPushed.current` unchanged so the next local change (or the next debounce tick) will try again.
-4. **Handle `unauthorized` as today** (toast + clear server config).
+## Duplicate detection
 
-No changes to WS logic, initial-pull logic, or the pill component itself. The pill will now reflect socket state honestly, and a broken push shows as a toast rather than as a misleading "reconnecting" state.
+A row counts as a duplicate when name + make + model match an existing car (case-insensitive). The chosen mode applies to all duplicate rows:
 
-## Out of scope
+- **Skip** — existing car untouched.
+- **Update existing** — overwrite provided fields, keep the existing id, wins/losses, and team memberships. Blank CSV cells leave the existing value alone.
+- **Add as new** — new unique id, existing car kept.
 
-The underlying "car disappears on refresh" issue (pushes actually failing over the Cloudflare tunnel) is a separate diagnosis — this change only makes the pill honest and makes push failures visible/retried so we can see what's really happening. If pushes still fail after this, the toast will tell us the HTTP error and we can dig into CORS/tunnel config next.
+## Technical notes
+
+- New `src/lib/car-import.ts`: dependency-free CSV parser (handles quotes, commas in fields, CRLF), header mapping, per-row validation via the existing zod-ish rules, and duplicate matching. Pure functions so the logic stays testable.
+- New `src/components/BulkImportDialog.tsx`: file inputs, preview table, duplicate-mode radio group, confirm/cancel. Scroll-capped (`max-h-[90vh] overflow-y-auto`) and stacked on mobile like the other dialogs.
+- Photos use `JSZip` (already installed) for ZIP reading and `fileToDataUrl` + the resize helper from `src/lib/image.ts`.
+- Garage writes go through the existing `useLocalStorage("pitlane.cars", ...)` setter in one batched update, so server sync picks it up as a single push.
+- Template CSV is generated client-side and downloaded via the existing `downloadBlob` helper in `src/lib/backup.ts`.
