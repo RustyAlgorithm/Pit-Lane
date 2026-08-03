@@ -6,7 +6,8 @@ import { useLocalStorage } from "@/lib/storage";
 import type { Car } from "@/lib/types";
 import { CarForm } from "@/components/CarForm";
 import { CarCard } from "@/components/CarCard";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { BulkImportDialog } from "@/components/BulkImportDialog";
+import { Plus, Pencil, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/garage")({
@@ -23,6 +24,7 @@ function GaragePage() {
   const [cars, setCars] = useLocalStorage<Car[]>("pitlane.cars", []);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Car | undefined>();
+  const [importOpen, setImportOpen] = useState(false);
 
   function save(car: Car) {
     setCars((prev) => {
@@ -42,6 +44,14 @@ function GaragePage() {
     toast.success("Removed");
   }
 
+  function applyImport({ added, updated }: { added: Car[]; updated: Car[] }) {
+    setCars((prev) => {
+      const byId = new Map(updated.map((c) => [c.id, c]));
+      const merged = prev.map((c) => byId.get(c.id) ?? c);
+      return [...added, ...merged];
+    });
+  }
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:py-12">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -49,20 +59,32 @@ function GaragePage() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Garage</h1>
           <p className="mt-1 text-sm text-muted-foreground">{cars.length} car{cars.length === 1 ? "" : "s"} in your collection</p>
         </div>
-        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(undefined); }}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setEditing(undefined)} className="w-full shadow-[var(--shadow-elegant)] sm:w-auto">
-              <Plus className="mr-1 h-4 w-4" /> Add car
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editing ? "Edit car" : "Add a new car"}</DialogTitle>
-            </DialogHeader>
-            <CarForm initial={editing} onSave={save} onCancel={() => { setOpen(false); setEditing(undefined); }} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => setImportOpen(true)}>
+            <Upload className="mr-1 h-4 w-4" /> Import cars
+          </Button>
+          <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(undefined); }}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setEditing(undefined)} className="w-full shadow-[var(--shadow-elegant)] sm:w-auto">
+                <Plus className="mr-1 h-4 w-4" /> Add car
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{editing ? "Edit car" : "Add a new car"}</DialogTitle>
+              </DialogHeader>
+              <CarForm initial={editing} onSave={save} onCancel={() => { setOpen(false); setEditing(undefined); }} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      <BulkImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        existing={cars}
+        onImport={applyImport}
+      />
 
       {cars.length === 0 ? (
         <div className="mt-12 rounded-2xl border-2 border-dashed border-border p-12 text-center">
