@@ -144,6 +144,8 @@ export interface Tournament {
   // heats format
   heatRounds?: { lanes: number; advance: number }[];
   consolation?: boolean;
+  // narrative mode
+  narrative?: TournamentNarrative;
 }
 
 export interface Team {
@@ -157,4 +159,6 @@ export interface Team {
   wins?: number;
   losses?: number;
   championshipWins?: number;
+  role?: NarrativeRole;
+  story?: string;
 }
