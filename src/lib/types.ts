@@ -15,6 +15,54 @@ export interface TimeEntry {
   recordedAt: number;
 }
 
+export type NarrativeRole = "hero" | "villain" | "neutral";
+
+export type NarrativeEventType = "rematch" | "driver-swap" | "handicap" | "story-beat";
+
+export interface Rivalry {
+  id: string;
+  aId: string;
+  bId: string;
+  reason: string;
+  auto?: boolean;
+}
+
+export interface NarrativeEvent {
+  id: string;
+  matchId: string;
+  type: NarrativeEventType;
+  title: string;
+  text: string;
+  favouredId?: string | null;
+  /** rematch: winners of each completed leg */
+  legWinnerIds?: string[];
+  accepted: boolean;
+  resolved: boolean;
+  at: number;
+}
+
+export interface StoryEntry {
+  id: string;
+  at: number;
+  kind: "rivalry" | "event" | "result" | "beat" | "champion";
+  text: string;
+  matchId?: string;
+}
+
+export interface TournamentNarrative {
+  enabled: boolean;
+  /** participantId -> role, overrides the global car/team role for this tournament */
+  roleOverrides: Record<string, NarrativeRole>;
+  rivalries: Rivalry[];
+  /** -100 (heroes always lose) .. 0 neutral .. 100 (heroes always win) */
+  heroBias: number;
+  eventFrequency: "off" | "rare" | "occasional" | "frequent";
+  collision: "early" | "late";
+  enabledEvents: NarrativeEventType[];
+  events: NarrativeEvent[];
+  log: StoryEntry[];
+}
+
 export interface Car {
   id: string;
   name: string;
@@ -29,7 +77,10 @@ export interface Car {
   wins?: number;
   losses?: number;
   championshipWins?: number;
+  role?: NarrativeRole;
+  story?: string;
 }
+
 
 export interface Match {
   id: string;
@@ -93,6 +144,8 @@ export interface Tournament {
   // heats format
   heatRounds?: { lanes: number; advance: number }[];
   consolation?: boolean;
+  // narrative mode
+  narrative?: TournamentNarrative;
 }
 
 export interface Team {
@@ -106,4 +159,6 @@ export interface Team {
   wins?: number;
   losses?: number;
   championshipWins?: number;
+  role?: NarrativeRole;
+  story?: string;
 }
