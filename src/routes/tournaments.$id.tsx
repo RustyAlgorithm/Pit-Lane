@@ -194,11 +194,10 @@ function TournamentDetail() {
           ? legs.length === 0
             ? "Two legs — pick the winner of leg 1"
             : `Leg ${legs.length} to ${nameOf(legs[legs.length - 1], cars, teams)} — race again`
-          : ev?.accepted && !ev.resolved === false && ev.type !== "rematch"
+          : ev?.accepted
             ? ev.title
-            : ev?.accepted
-              ? ev.title
-              : undefined,
+            : undefined,
+
       twistLabel: pending ? "Reveal story twist" : undefined,
       onOpenTwist: pending ? () => setTwistMatchId(m.id) : undefined,
     };
