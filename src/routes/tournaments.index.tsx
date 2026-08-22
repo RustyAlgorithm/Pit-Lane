@@ -7,11 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLocalStorage, uid } from "@/lib/storage";
-import type { Car, Team, Tournament, BracketFormat } from "@/lib/types";
+import type { Car, Team, Tournament, BracketFormat, TournamentNarrative } from "@/lib/types";
 import { buildMatches, buildQualifyingMatches, nextPow2Down, buildHeats } from "@/lib/bracket";
 import { Plus, Trophy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CarCard } from "@/components/CarCard";
+import { NarrativePanel } from "@/components/NarrativePanel";
+import { defaultNarrative, allRivalries, narrativeOrder } from "@/lib/narrative";
+
 
 export const Route = createFileRoute("/tournaments/")({
   head: () => ({
