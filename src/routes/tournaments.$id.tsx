@@ -128,6 +128,131 @@ function TournamentDetail() {
   const champ = championTeam ?? championCar ?? null;
   const certificatePlacements = getTournamentPlacements(tournament, cars, teams);
 
+  /* ------------------------------------------------------------ narrative */
+  const narrative = getNarrative(tournament);
+  const narrativeOn = narrative.enabled;
+  const roleOf = makeRoleResolver(narrative, cars, teams);
+  const rivalries = narrativeOn ? allRivalries(tournament, narrative, cars, teams) : [];
+  const isTeamsMode = tournament.participationType === "teams";
+  const sideIds = (m: Match): [string | null, string | null] =>
+    isTeamsMode ? [m.teamAId ?? null, m.teamBId ?? null] : [m.carAId ?? null, m.carBId ?? null];
+
+  function patchTournament(fn: (x: Tournament) => Tournament) {
+    setTournaments((prev) => prev.map((x) => (x.id === tournament.id ? fn(x) : x)));
+  }
+
+  function updateNarrative(patch: Partial<TournamentNarrative>) {
+    patchTournament((x) => withNarrative(x, patch));
+  }
+
+  const twistMatch = twistMatchId
+    ? [...tournament.matches, ...(tournament.qualifyingMatches ?? [])].find((m) => m.id === twistMatchId)
+    : undefined;
+  let twistEvent: NarrativeEvent | null = null;
+  if (twistMatch) {
+    const [aId, bId] = sideIds(twistMatch);
+    twistEvent =
+      getEvent(narrative, twistMatch.id) ??
+      (aId && bId
+        ? rollEvent(narrative, twistMatch.id, aId, bId, cars, teams, !!findRivalry(rivalries, aId, bId))
+        : null);
+  }
+
+  function acceptTwist() {
+    if (!twistEvent) return;
+    const ev: NarrativeEvent = { ...twistEvent, accepted: true, resolved: twistEvent.type !== "rematch" };
+    patchTournament((x) =>
+      appendLog(upsertEvent(x, ev), [logEntry("event", `${ev.title} — ${ev.text}`, ev.matchId)]),
+    );
+    setTwistMatchId(null);
+    toast.success("Story twist is canon");
+  }
+
+  function dismissTwist() {
+    if (twistEvent) {
+      const ev: NarrativeEvent = { ...twistEvent, accepted: false, resolved: true };
+      patchTournament((x) => upsertEvent(x, ev));
+    }
+    setTwistMatchId(null);
+  }
+
+  /** Build the narrative decoration for a bracket cell. */
+  function narrativeFor(m: Match): MatchNarrative | null {
+    if (!narrativeOn) return null;
+    const [aId, bId] = sideIds(m);
+    const rivalry = findRivalry(rivalries, aId, bId);
+    const ev = getEvent(narrative, m.id);
+    const pending = !!aId && !!bId && !m.winnerId && !ev;
+    const legs = ev?.accepted && ev.type === "rematch" ? ev.legWinnerIds ?? [] : [];
+    return {
+      reason: rivalry?.reason,
+      roleA: roleOf(aId),
+      roleB: roleOf(bId),
+      suggestedId: m.winnerId ? null : suggestedWinner(narrative, m.id, aId, bId, cars, teams),
+      legText:
+        ev?.accepted && ev.type === "rematch" && !m.winnerId
+          ? legs.length === 0
+            ? "Two legs — pick the winner of leg 1"
+            : `Leg ${legs.length} to ${nameOf(legs[legs.length - 1], cars, teams)} — race again`
+          : ev?.accepted && !ev.resolved === false && ev.type !== "rematch"
+            ? ev.title
+            : ev?.accepted
+              ? ev.title
+              : undefined,
+      twistLabel: pending ? "Reveal story twist" : undefined,
+      onOpenTwist: pending ? () => setTwistMatchId(m.id) : undefined,
+    };
+  }
+
+  /**
+   * If an accepted rematch twist is live on this match, record a leg instead of
+   * finishing the match. Returns true when the pick was consumed as a leg.
+   */
+  function consumeRematchLeg(matchId: string, winnerId: string): boolean {
+    const ev = getEvent(narrative, matchId);
+    if (!ev || !ev.accepted || ev.type !== "rematch" || ev.resolved) return false;
+    const legs = [...(ev.legWinnerIds ?? []), winnerId];
+    const tally = legs.reduce<Record<string, number>>((acc, w) => {
+      acc[w] = (acc[w] ?? 0) + 1;
+      return acc;
+    }, {});
+    const decided = Object.entries(tally).find(([, count]) => count >= 2);
+    const name = nameOf(winnerId, cars, teams);
+    if (!decided) {
+      patchTournament((x) =>
+        appendLog(upsertEvent(x, { ...ev, legWinnerIds: legs }), [
+          logEntry("beat", `Leg ${legs.length}: ${name} takes it.`, matchId),
+        ]),
+      );
+      toast.success(`Leg ${legs.length} to ${name} — race again`);
+      return true;
+    }
+    // decided: mark resolved, then let the normal winner flow run
+    patchTournament((x) =>
+      appendLog(upsertEvent(x, { ...ev, legWinnerIds: legs, resolved: true }), [
+        logEntry("beat", `${name} wins the rematch ${tally[winnerId]}–${legs.length - tally[winnerId]}.`, matchId),
+      ]),
+    );
+    return false;
+  }
+
+  function logResult(matchId: string, winnerId: string, loserId: string | null) {
+    if (!narrativeOn) return;
+    const rivalry = findRivalry(rivalries, winnerId, loserId);
+    const wName = nameOf(winnerId, cars, teams);
+    const lName = loserId ? nameOf(loserId, cars, teams) : "the field";
+    const role = roleOf(winnerId);
+    const flavour = rivalry
+      ? `Grudge settled: ${wName} beats ${lName}.`
+      : role === "hero"
+        ? `${wName} keeps the dream alive, seeing off ${lName}.`
+        : role === "villain"
+          ? `${wName} crushes ${lName} without a hint of mercy.`
+          : `${wName} beats ${lName}.`;
+    patchTournament((x) => appendLog(x, [logEntry("result", flavour, matchId)]));
+  }
+
+
   // Check if all round-robin matches are complete
   const allRoundRobinComplete =
     tournament.format === "round-robin" && tournament.matches.every((m) => m.winnerId !== null);
