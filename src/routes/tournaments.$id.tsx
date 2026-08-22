@@ -798,6 +798,7 @@ function TournamentDetail() {
           cars={cars}
           teams={teams}
           onPick={pickWinner}
+          narrativeFor={narrativeFor}
           onSelectSeriesCar={(mId, gId, side, cId) =>
             selectSeriesCar("matches", mId, gId, side, cId)
           }
@@ -843,6 +844,7 @@ function TournamentDetail() {
           carById={carById}
           teamById={teamById}
           onPick={pickWinner}
+          narrativeFor={narrativeFor}
           onSelectSeriesCar={(mId, gId, side, cId) =>
             selectSeriesCar("matches", mId, gId, side, cId)
           }
