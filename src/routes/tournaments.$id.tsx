@@ -1861,21 +1861,22 @@ function ChampionshipView({
 }
 
 function MatchCell({
-  carA, carB, teamA, teamB, winnerId, onPick, label,
+  carA, carB, teamA, teamB, winnerId, onPick, label, narrative,
 }: {
   carA?: Car; carB?: Car;
   teamA?: Team; teamB?: Team;
   winnerId?: string | null;
   onPick: (id: string) => void;
   label?: string;
+  narrative?: MatchNarrative | null;
 }) {
   const isTeams = !!teamA || !!teamB;
   const aId = isTeams ? teamA?.id : carA?.id;
   const bId = isTeams ? teamB?.id : carB?.id;
   const aName = isTeams ? teamA?.name : carA?.name;
   const bName = isTeams ? teamB?.name : carB?.name;
-  
-  const Slot = ({ id, name, isWinner }: { id?: string; name?: string; isWinner: boolean }) => (
+
+  const Slot = ({ id, name, isWinner, role, favoured }: { id?: string; name?: string; isWinner: boolean; role?: NarrativeRole; favoured?: boolean }) => (
     <button
       type="button"
       disabled={!id || !aId || !bId || !!winnerId}
@@ -1894,6 +1895,8 @@ function MatchCell({
         </span>
       )}
       <span className="flex-1 truncate">{name ?? "TBD"}</span>
+      {role && role !== "neutral" && <RoleBadge role={role} />}
+      {favoured && !winnerId && <Sparkles className="h-3.5 w-3.5 text-amber-500" />}
       {isWinner && <Trophy className="h-3.5 w-3.5" />}
     </button>
   );
@@ -1901,12 +1904,41 @@ function MatchCell({
   return (
     <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
       {label && <div className="border-b border-border bg-secondary/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>}
-      <Slot id={aId} name={aName} isWinner={winnerId === aId} />
+      {narrative?.reason && <RivalryCallout reason={narrative.reason} />}
+      <Slot
+        id={aId}
+        name={aName}
+        isWinner={winnerId === aId}
+        role={narrative?.roleA}
+        favoured={!!aId && narrative?.suggestedId === aId}
+      />
       <div className="border-t border-border" />
-      <Slot id={bId} name={bName} isWinner={winnerId === bId} />
+      <Slot
+        id={bId}
+        name={bName}
+        isWinner={winnerId === bId}
+        role={narrative?.roleB}
+        favoured={!!bId && narrative?.suggestedId === bId}
+      />
+      {narrative?.legText && (
+        <div className="border-t border-border bg-secondary/40 px-3 py-1.5 text-[11px] text-muted-foreground">
+          {narrative.legText}
+        </div>
+      )}
+      {narrative?.twistLabel && narrative.onOpenTwist && (
+        <button
+          type="button"
+          onClick={narrative.onOpenTwist}
+          className="flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-[11px] font-medium text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+        >
+          <Sparkles className="h-3 w-3" />
+          {narrative.twistLabel}
+        </button>
+      )}
     </Card>
   );
 }
+
 
 function Bracket({
   t, cars, carById, teamById, onPick, onSelectSeriesCar, onPickSeriesGame, onTiebreaker,
