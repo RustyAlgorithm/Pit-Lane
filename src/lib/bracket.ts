@@ -452,9 +452,11 @@ function chunk<T>(arr: T[], size: number): T[][] {
 export function buildHeats(
   rounds: HeatRoundCfg[],
   participantIds: string[],
+  opts: { preordered?: boolean } = {},
 ): Match[] {
   if (rounds.length === 0 || participantIds.length < 2) return [];
-  const shuffled = shuffle(participantIds);
+  const shuffled = opts.preordered ? [...participantIds] : shuffle(participantIds);
+
   const matches: Match[] = [];
 
   // Round 1
