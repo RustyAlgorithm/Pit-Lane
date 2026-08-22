@@ -56,7 +56,9 @@ function TournamentsPage() {
     { lanes: 2, advance: 1 },
   ]);
   const [consolation, setConsolation] = useState(false);
+  const [narrative, setNarrative] = useState<TournamentNarrative>(() => defaultNarrative());
   const navigate = useNavigate();
+
 
   function toggle(id: string) {
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
