@@ -1,15 +1,43 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useLocalStorage, uid } from "@/lib/storage";
-import type { Car, Tournament, TimeEntry, Team } from "@/lib/types";
+import type {
+  Car,
+  Tournament,
+  TimeEntry,
+  Team,
+  Match,
+  NarrativeEvent,
+  NarrativeRole,
+  TournamentNarrative,
+} from "@/lib/types";
 import { applyWinner, standingsFor, buildSeededBracket, rankQualifiers, applyHeatFinish } from "@/lib/bracket";
 import { getTournamentPlacements } from "@/lib/tournamentPlacements";
 import { toast } from "sonner";
 import { TournamentCertificateDialog } from "@/components/TournamentCertificateDialog";
+import { NarrativePanel } from "@/components/NarrativePanel";
+import { NarrativeEventDialog } from "@/components/NarrativeEventDialog";
+import { RoleBadge, RivalryCallout } from "@/components/NarrativeBadges";
+import {
+  allRivalries,
+  appendLog,
+  championNote,
+  computeArcs,
+  findRivalry,
+  getEvent,
+  getNarrative,
+  logEntry,
+  makeRoleResolver,
+  nameOf,
+  rollEvent,
+  suggestedWinner,
+  upsertEvent,
+  withNarrative,
+} from "@/lib/narrative";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download, Dices, Radio, Plug, PlugZap, HelpCircle } from "lucide-react";
+import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download, Dices, Radio, Plug, PlugZap, HelpCircle, Sparkles, BookOpen } from "lucide-react";
 import { useTimer, type LapEvent, type TimerStatus } from "@/lib/timer/useTimer";
 import {
   Popover,
@@ -24,6 +52,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+/** Per-match narrative decoration handed to bracket cells. */
+export interface MatchNarrative {
+  reason?: string;
+  roleA: NarrativeRole;
+  roleB: NarrativeRole;
+  suggestedId: string | null;
+  legText?: string;
+  twistLabel?: string;
+  onOpenTwist?: () => void;
+}
+
 
 export const Route = createFileRoute("/tournaments/$id")({
   component: TournamentDetail,
