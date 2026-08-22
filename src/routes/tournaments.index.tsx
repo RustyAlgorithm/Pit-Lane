@@ -130,6 +130,20 @@ function TournamentsPage() {
       if (!Number.isFinite(trackLengthNum) || trackLengthNum <= 0)
         return toast.error("Enter a valid track length");
     }
+    // Narrative mode can bias the draw so rivals collide.
+    const draftTournament = {
+      participationType,
+      ...(participationType === "cars" ? { carIds: picked } : { teamIds: picked }),
+    } as Tournament;
+    const rivalries = narrative.enabled
+      ? allRivalries(draftTournament, narrative, cars, teams)
+      : [];
+    const order =
+      narrative.enabled && rivalries.length > 0
+        ? narrativeOrder(picked, rivalries, narrative.collision)
+        : picked;
+    const preordered = order !== picked;
+
     const t: Tournament = {
       id: uid(),
       name: name.trim().slice(0, 60),
@@ -138,12 +152,17 @@ function TournamentsPage() {
       ...(participationType === "cars" ? { carIds: picked } : { teamIds: picked }),
       matches:
         format === "heats"
-          ? buildHeats(heatRounds, picked)
-          : buildMatches(format, picked, participationType, { seriesLength: useFullTeam ? seriesLength : 0 }),
+          ? buildHeats(heatRounds, order, { preordered })
+          : buildMatches(format, order, participationType, {
+              seriesLength: useFullTeam ? seriesLength : 0,
+              preordered,
+            }),
       createdAt: Date.now(),
       champion: null,
       persistent,
       previousSeasons: [],
+      narrative,
+
       ...(useFullTeam ? { fullTeamMode: true, seriesLength } : {}),
       ...(format === "heats" ? { heatRounds: [...heatRounds], consolation } : {}),
       ...(format === "time-trial"
