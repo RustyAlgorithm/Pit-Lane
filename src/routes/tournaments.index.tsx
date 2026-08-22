@@ -538,6 +538,16 @@ function TournamentsPage() {
                   </div>
               )}
 
+              <NarrativePanel
+                narrative={narrative}
+                participantIds={picked}
+                cars={cars}
+                teams={teams}
+                onChange={(patch) => setNarrative((n) => ({ ...n, ...patch }))}
+              />
+
+
+
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
                 <Button onClick={create}>Create & seed bracket</Button>
