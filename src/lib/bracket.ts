@@ -29,13 +29,14 @@ export function buildMatches(
   format: BracketFormat,
   participantIds: string[],
   participationType: "cars" | "teams" = "cars",
-  opts: { seriesLength?: number } = {},
+  opts: { seriesLength?: number; preordered?: boolean } = {},
 ): Match[] {
   if (format === "time-trial") return [];
   if (format === "championship") return [];
   if (format === "heats") return [];
   if (participantIds.length < 2) return [];
-  const ids = shuffle(participantIds);
+  const ids = opts.preordered ? [...participantIds] : shuffle(participantIds);
+
   const isTeams = participationType === "teams";
   const seriesLength = isTeams && opts.seriesLength && opts.seriesLength > 0 ? opts.seriesLength : 0;
   const attachSeries = () =>
