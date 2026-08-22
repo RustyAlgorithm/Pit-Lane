@@ -194,6 +194,8 @@ function TournamentsPage() {
     setFullTeamMode(false);
     setHeatRounds([{ lanes: 4, advance: 2 }, { lanes: 2, advance: 1 }]);
     setConsolation(false);
+    setNarrative(defaultNarrative());
+
     toast.success("Tournament created");
     navigate({ to: "/tournaments/$id", params: { id: t.id } });
   }
