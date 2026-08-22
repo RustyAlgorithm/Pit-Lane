@@ -7,11 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLocalStorage, uid } from "@/lib/storage";
-import type { Car, Team, Tournament, BracketFormat } from "@/lib/types";
+import type { Car, Team, Tournament, BracketFormat, TournamentNarrative } from "@/lib/types";
 import { buildMatches, buildQualifyingMatches, nextPow2Down, buildHeats } from "@/lib/bracket";
 import { Plus, Trophy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CarCard } from "@/components/CarCard";
+import { NarrativePanel } from "@/components/NarrativePanel";
+import { defaultNarrative, allRivalries, narrativeOrder } from "@/lib/narrative";
+
 
 export const Route = createFileRoute("/tournaments/")({
   head: () => ({
@@ -53,7 +56,9 @@ function TournamentsPage() {
     { lanes: 2, advance: 1 },
   ]);
   const [consolation, setConsolation] = useState(false);
+  const [narrative, setNarrative] = useState<TournamentNarrative>(() => defaultNarrative());
   const navigate = useNavigate();
+
 
   function toggle(id: string) {
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
@@ -125,6 +130,20 @@ function TournamentsPage() {
       if (!Number.isFinite(trackLengthNum) || trackLengthNum <= 0)
         return toast.error("Enter a valid track length");
     }
+    // Narrative mode can bias the draw so rivals collide.
+    const draftTournament = {
+      participationType,
+      ...(participationType === "cars" ? { carIds: picked } : { teamIds: picked }),
+    } as Tournament;
+    const rivalries = narrative.enabled
+      ? allRivalries(draftTournament, narrative, cars, teams)
+      : [];
+    const order =
+      narrative.enabled && rivalries.length > 0
+        ? narrativeOrder(picked, rivalries, narrative.collision)
+        : picked;
+    const preordered = order !== picked;
+
     const t: Tournament = {
       id: uid(),
       name: name.trim().slice(0, 60),
@@ -133,12 +152,17 @@ function TournamentsPage() {
       ...(participationType === "cars" ? { carIds: picked } : { teamIds: picked }),
       matches:
         format === "heats"
-          ? buildHeats(heatRounds, picked)
-          : buildMatches(format, picked, participationType, { seriesLength: useFullTeam ? seriesLength : 0 }),
+          ? buildHeats(heatRounds, order, { preordered })
+          : buildMatches(format, order, participationType, {
+              seriesLength: useFullTeam ? seriesLength : 0,
+              preordered,
+            }),
       createdAt: Date.now(),
       champion: null,
       persistent,
       previousSeasons: [],
+      narrative,
+
       ...(useFullTeam ? { fullTeamMode: true, seriesLength } : {}),
       ...(format === "heats" ? { heatRounds: [...heatRounds], consolation } : {}),
       ...(format === "time-trial"
@@ -170,6 +194,8 @@ function TournamentsPage() {
     setFullTeamMode(false);
     setHeatRounds([{ lanes: 4, advance: 2 }, { lanes: 2, advance: 1 }]);
     setConsolation(false);
+    setNarrative(defaultNarrative());
+
     toast.success("Tournament created");
     navigate({ to: "/tournaments/$id", params: { id: t.id } });
   }
@@ -511,6 +537,16 @@ function TournamentsPage() {
                     </Label>
                   </div>
               )}
+
+              <NarrativePanel
+                narrative={narrative}
+                participantIds={picked}
+                cars={cars}
+                teams={teams}
+                onChange={(patch) => setNarrative((n) => ({ ...n, ...patch }))}
+              />
+
+
 
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>

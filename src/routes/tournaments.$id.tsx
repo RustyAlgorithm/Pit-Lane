@@ -1,15 +1,43 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useLocalStorage, uid } from "@/lib/storage";
-import type { Car, Tournament, TimeEntry, Team } from "@/lib/types";
+import type {
+  Car,
+  Tournament,
+  TimeEntry,
+  Team,
+  Match,
+  NarrativeEvent,
+  NarrativeRole,
+  TournamentNarrative,
+} from "@/lib/types";
 import { applyWinner, standingsFor, buildSeededBracket, rankQualifiers, applyHeatFinish } from "@/lib/bracket";
 import { getTournamentPlacements } from "@/lib/tournamentPlacements";
 import { toast } from "sonner";
 import { TournamentCertificateDialog } from "@/components/TournamentCertificateDialog";
+import { NarrativePanel } from "@/components/NarrativePanel";
+import { NarrativeEventDialog } from "@/components/NarrativeEventDialog";
+import { RoleBadge, RivalryCallout } from "@/components/NarrativeBadges";
+import {
+  allRivalries,
+  appendLog,
+  championNote,
+  computeArcs,
+  findRivalry,
+  getEvent,
+  getNarrative,
+  logEntry,
+  makeRoleResolver,
+  nameOf,
+  rollEvent,
+  suggestedWinner,
+  upsertEvent,
+  withNarrative,
+} from "@/lib/narrative";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download, Dices, Radio, Plug, PlugZap, HelpCircle } from "lucide-react";
+import { ArrowLeft, Trophy, Car as CarIcon, Timer, Trash2, Download, Dices, Radio, Plug, PlugZap, HelpCircle, Sparkles, BookOpen } from "lucide-react";
 import { useTimer, type LapEvent, type TimerStatus } from "@/lib/timer/useTimer";
 import {
   Popover,
@@ -24,6 +52,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+/** Per-match narrative decoration handed to bracket cells. */
+export interface MatchNarrative {
+  reason?: string;
+  roleA: NarrativeRole;
+  roleB: NarrativeRole;
+  suggestedId: string | null;
+  legText?: string;
+  twistLabel?: string;
+  onOpenTwist?: () => void;
+}
+
 
 export const Route = createFileRoute("/tournaments/$id")({
   component: TournamentDetail,
@@ -58,6 +98,9 @@ function TournamentDetail() {
   const [cars, setCars] = useLocalStorage<Car[]>("pitlane.cars", []);
   const [teams, setTeams] = useLocalStorage<Team[]>("pitlane.teams", []);
   const [certificateOpen, setCertificateOpen] = useState(false);
+  const [twistMatchId, setTwistMatchId] = useState<string | null>(null);
+  const [narrativeSettingsOpen, setNarrativeSettingsOpen] = useState(false);
+
   const t = tournaments.find((x) => x.id === id);
 
   if (!t) {
@@ -84,6 +127,130 @@ function TournamentDetail() {
       : undefined;
   const champ = championTeam ?? championCar ?? null;
   const certificatePlacements = getTournamentPlacements(tournament, cars, teams);
+
+  /* ------------------------------------------------------------ narrative */
+  const narrative = getNarrative(tournament);
+  const narrativeOn = narrative.enabled;
+  const roleOf = makeRoleResolver(narrative, cars, teams);
+  const rivalries = narrativeOn ? allRivalries(tournament, narrative, cars, teams) : [];
+  const isTeamsMode = tournament.participationType === "teams";
+  const sideIds = (m: Match): [string | null, string | null] =>
+    isTeamsMode ? [m.teamAId ?? null, m.teamBId ?? null] : [m.carAId ?? null, m.carBId ?? null];
+
+  function patchTournament(fn: (x: Tournament) => Tournament) {
+    setTournaments((prev) => prev.map((x) => (x.id === tournament.id ? fn(x) : x)));
+  }
+
+  function updateNarrative(patch: Partial<TournamentNarrative>) {
+    patchTournament((x) => withNarrative(x, patch));
+  }
+
+  const twistMatch = twistMatchId
+    ? [...tournament.matches, ...(tournament.qualifyingMatches ?? [])].find((m) => m.id === twistMatchId)
+    : undefined;
+  let twistEvent: NarrativeEvent | null = null;
+  if (twistMatch) {
+    const [aId, bId] = sideIds(twistMatch);
+    twistEvent =
+      getEvent(narrative, twistMatch.id) ??
+      (aId && bId
+        ? rollEvent(narrative, twistMatch.id, aId, bId, cars, teams, !!findRivalry(rivalries, aId, bId))
+        : null);
+  }
+
+  function acceptTwist() {
+    if (!twistEvent) return;
+    const ev: NarrativeEvent = { ...twistEvent, accepted: true, resolved: twistEvent.type !== "rematch" };
+    patchTournament((x) =>
+      appendLog(upsertEvent(x, ev), [logEntry("event", `${ev.title} — ${ev.text}`, ev.matchId)]),
+    );
+    setTwistMatchId(null);
+    toast.success("Story twist is canon");
+  }
+
+  function dismissTwist() {
+    if (twistEvent) {
+      const ev: NarrativeEvent = { ...twistEvent, accepted: false, resolved: true };
+      patchTournament((x) => upsertEvent(x, ev));
+    }
+    setTwistMatchId(null);
+  }
+
+  /** Build the narrative decoration for a bracket cell. */
+  function narrativeFor(m: Match): MatchNarrative | null {
+    if (!narrativeOn) return null;
+    const [aId, bId] = sideIds(m);
+    const rivalry = findRivalry(rivalries, aId, bId);
+    const ev = getEvent(narrative, m.id);
+    const pending = !!aId && !!bId && !m.winnerId && !ev;
+    const legs = ev?.accepted && ev.type === "rematch" ? ev.legWinnerIds ?? [] : [];
+    return {
+      reason: rivalry?.reason,
+      roleA: roleOf(aId),
+      roleB: roleOf(bId),
+      suggestedId: m.winnerId ? null : suggestedWinner(narrative, m.id, aId, bId, cars, teams),
+      legText:
+        ev?.accepted && ev.type === "rematch" && !m.winnerId
+          ? legs.length === 0
+            ? "Two legs — pick the winner of leg 1"
+            : `Leg ${legs.length} to ${nameOf(legs[legs.length - 1], cars, teams)} — race again`
+          : ev?.accepted
+            ? ev.title
+            : undefined,
+
+      twistLabel: pending ? "Reveal story twist" : undefined,
+      onOpenTwist: pending ? () => setTwistMatchId(m.id) : undefined,
+    };
+  }
+
+  /**
+   * If an accepted rematch twist is live on this match, record a leg instead of
+   * finishing the match. Returns true when the pick was consumed as a leg.
+   */
+  function consumeRematchLeg(matchId: string, winnerId: string): boolean {
+    const ev = getEvent(narrative, matchId);
+    if (!ev || !ev.accepted || ev.type !== "rematch" || ev.resolved) return false;
+    const legs = [...(ev.legWinnerIds ?? []), winnerId];
+    const tally = legs.reduce<Record<string, number>>((acc, w) => {
+      acc[w] = (acc[w] ?? 0) + 1;
+      return acc;
+    }, {});
+    const decided = Object.entries(tally).find(([, count]) => count >= 2);
+    const name = nameOf(winnerId, cars, teams);
+    if (!decided) {
+      patchTournament((x) =>
+        appendLog(upsertEvent(x, { ...ev, legWinnerIds: legs }), [
+          logEntry("beat", `Leg ${legs.length}: ${name} takes it.`, matchId),
+        ]),
+      );
+      toast.success(`Leg ${legs.length} to ${name} — race again`);
+      return true;
+    }
+    // decided: mark resolved, then let the normal winner flow run
+    patchTournament((x) =>
+      appendLog(upsertEvent(x, { ...ev, legWinnerIds: legs, resolved: true }), [
+        logEntry("beat", `${name} wins the rematch ${tally[winnerId]}–${legs.length - tally[winnerId]}.`, matchId),
+      ]),
+    );
+    return false;
+  }
+
+  function logResult(matchId: string, winnerId: string, loserId: string | null) {
+    if (!narrativeOn) return;
+    const rivalry = findRivalry(rivalries, winnerId, loserId);
+    const wName = nameOf(winnerId, cars, teams);
+    const lName = loserId ? nameOf(loserId, cars, teams) : "the field";
+    const role = roleOf(winnerId);
+    const flavour = rivalry
+      ? `Grudge settled: ${wName} beats ${lName}.`
+      : role === "hero"
+        ? `${wName} keeps the dream alive, seeing off ${lName}.`
+        : role === "villain"
+          ? `${wName} crushes ${lName} without a hint of mercy.`
+          : `${wName} beats ${lName}.`;
+    patchTournament((x) => appendLog(x, [logEntry("result", flavour, matchId)]));
+  }
+
 
   // Check if all round-robin matches are complete
   const allRoundRobinComplete =
@@ -227,9 +394,14 @@ function TournamentDetail() {
       }
     }
 
+    // A live rematch twist turns this pick into a leg result instead.
+    if (narrativeOn && consumeRematchLeg(matchId, winnerId)) return;
+
     setTournaments((prev) =>
       prev.map((x) => (x.id === tournament.id ? applyWinner(x, matchId, winnerId) : x)),
     );
+    logResult(matchId, winnerId, loserId);
+
     
     // Increment wins for the winner and losses for the loser
     if (tournament.participationType === "teams") {
@@ -626,6 +798,7 @@ function TournamentDetail() {
           cars={cars}
           teams={teams}
           onPick={pickWinner}
+          narrativeFor={narrativeFor}
           onSelectSeriesCar={(mId, gId, side, cId) =>
             selectSeriesCar("matches", mId, gId, side, cId)
           }
@@ -671,6 +844,7 @@ function TournamentDetail() {
           carById={carById}
           teamById={teamById}
           onPick={pickWinner}
+          narrativeFor={narrativeFor}
           onSelectSeriesCar={(mId, gId, side, cId) =>
             selectSeriesCar("matches", mId, gId, side, cId)
           }
@@ -1687,21 +1861,22 @@ function ChampionshipView({
 }
 
 function MatchCell({
-  carA, carB, teamA, teamB, winnerId, onPick, label,
+  carA, carB, teamA, teamB, winnerId, onPick, label, narrative,
 }: {
   carA?: Car; carB?: Car;
   teamA?: Team; teamB?: Team;
   winnerId?: string | null;
   onPick: (id: string) => void;
   label?: string;
+  narrative?: MatchNarrative | null;
 }) {
   const isTeams = !!teamA || !!teamB;
   const aId = isTeams ? teamA?.id : carA?.id;
   const bId = isTeams ? teamB?.id : carB?.id;
   const aName = isTeams ? teamA?.name : carA?.name;
   const bName = isTeams ? teamB?.name : carB?.name;
-  
-  const Slot = ({ id, name, isWinner }: { id?: string; name?: string; isWinner: boolean }) => (
+
+  const Slot = ({ id, name, isWinner, role, favoured }: { id?: string; name?: string; isWinner: boolean; role?: NarrativeRole; favoured?: boolean }) => (
     <button
       type="button"
       disabled={!id || !aId || !bId || !!winnerId}
@@ -1720,6 +1895,8 @@ function MatchCell({
         </span>
       )}
       <span className="flex-1 truncate">{name ?? "TBD"}</span>
+      {role && role !== "neutral" && <RoleBadge role={role} />}
+      {favoured && !winnerId && <Sparkles className="h-3.5 w-3.5 text-amber-500" />}
       {isWinner && <Trophy className="h-3.5 w-3.5" />}
     </button>
   );
@@ -1727,12 +1904,41 @@ function MatchCell({
   return (
     <Card className="overflow-hidden p-0 shadow-[var(--shadow-card)]">
       {label && <div className="border-b border-border bg-secondary/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>}
-      <Slot id={aId} name={aName} isWinner={winnerId === aId} />
+      {narrative?.reason && <RivalryCallout reason={narrative.reason} />}
+      <Slot
+        id={aId}
+        name={aName}
+        isWinner={winnerId === aId}
+        role={narrative?.roleA}
+        favoured={!!aId && narrative?.suggestedId === aId}
+      />
       <div className="border-t border-border" />
-      <Slot id={bId} name={bName} isWinner={winnerId === bId} />
+      <Slot
+        id={bId}
+        name={bName}
+        isWinner={winnerId === bId}
+        role={narrative?.roleB}
+        favoured={!!bId && narrative?.suggestedId === bId}
+      />
+      {narrative?.legText && (
+        <div className="border-t border-border bg-secondary/40 px-3 py-1.5 text-[11px] text-muted-foreground">
+          {narrative.legText}
+        </div>
+      )}
+      {narrative?.twistLabel && narrative.onOpenTwist && (
+        <button
+          type="button"
+          onClick={narrative.onOpenTwist}
+          className="flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-[11px] font-medium text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+        >
+          <Sparkles className="h-3 w-3" />
+          {narrative.twistLabel}
+        </button>
+      )}
     </Card>
   );
 }
+
 
 function Bracket({
   t, cars, carById, teamById, onPick, onSelectSeriesCar, onPickSeriesGame, onTiebreaker,
