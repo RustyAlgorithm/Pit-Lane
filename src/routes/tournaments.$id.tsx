@@ -394,9 +394,14 @@ function TournamentDetail() {
       }
     }
 
+    // A live rematch twist turns this pick into a leg result instead.
+    if (narrativeOn && consumeRematchLeg(matchId, winnerId)) return;
+
     setTournaments((prev) =>
       prev.map((x) => (x.id === tournament.id ? applyWinner(x, matchId, winnerId) : x)),
     );
+    logResult(matchId, winnerId, loserId);
+
     
     // Increment wins for the winner and losses for the loser
     if (tournament.participationType === "teams") {
