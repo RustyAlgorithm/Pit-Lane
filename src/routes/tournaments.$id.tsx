@@ -98,6 +98,9 @@ function TournamentDetail() {
   const [cars, setCars] = useLocalStorage<Car[]>("pitlane.cars", []);
   const [teams, setTeams] = useLocalStorage<Team[]>("pitlane.teams", []);
   const [certificateOpen, setCertificateOpen] = useState(false);
+  const [twistMatchId, setTwistMatchId] = useState<string | null>(null);
+  const [narrativeSettingsOpen, setNarrativeSettingsOpen] = useState(false);
+
   const t = tournaments.find((x) => x.id === id);
 
   if (!t) {
