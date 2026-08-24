@@ -2097,7 +2097,9 @@ function RoundRobin({
                 teamA={isTeams ? teamById(m.teamAId) : undefined}
                 teamB={isTeams ? teamById(m.teamBId) : undefined}
                 winnerId={m.winnerId}
+                narrative={narrativeFor?.(m)}
                 onPick={(id) => onPick(m.id, id)}
+
               />
             ),
           )}
