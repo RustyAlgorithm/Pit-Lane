@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { generateDriverName } from "@/lib/driver-names";
-import type { Car } from "@/lib/types";
+import type { Car, NarrativeRole } from "@/lib/types";
+import { ROLE_LABEL } from "@/lib/narrative";
 import { uid } from "@/lib/storage";
 import { Sparkles, Upload, X, Crop } from "lucide-react";
 import { toast } from "sonner";
@@ -39,6 +40,8 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
   const [brand, setBrand] = useState(initial?.brand ?? BRANDS[0]);
   const [photo, setPhoto] = useState<string | undefined>(initial?.photo);
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [role, setRole] = useState<NarrativeRole>(initial?.role ?? "neutral");
+  const [story, setStory] = useState(initial?.story ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
@@ -74,6 +77,8 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
       brand,
       photo,
       notes: notes.trim().slice(0, 300) || undefined,
+      role,
+      story: story.trim().slice(0, 200) || undefined,
       createdAt: initial?.createdAt ?? Date.now(),
     });
   }
@@ -232,6 +237,35 @@ export function CarForm({ initial, onSave, onCancel }: Props) {
           rows={2}
           placeholder="Custom paint, mods, history..."
         />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label className="mb-2 block">Story role</Label>
+          <div className="flex gap-2">
+            {(["hero", "neutral", "villain"] as NarrativeRole[]).map((r) => (
+              <Button
+                key={r}
+                type="button"
+                size="sm"
+                variant={role === r ? "default" : "outline"}
+                onClick={() => setRole(r)}
+              >
+                {ROLE_LABEL[r]}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="story">Backstory</Label>
+          <Input
+            id="story"
+            value={story}
+            onChange={(e) => setStory(e.target.value)}
+            maxLength={200}
+            placeholder="Rescued from a car boot sale..."
+          />
+        </div>
       </div>
 
       <div>
