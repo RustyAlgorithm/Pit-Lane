@@ -65,6 +65,8 @@ const carSchema = z.object({
   wins: z.number().nonnegative().optional(),
   losses: z.number().nonnegative().optional(),
   championshipWins: z.number().nonnegative().optional(),
+  role: z.enum(["hero", "villain", "neutral"]).optional(),
+  story: z.string().max(500).optional(),
 });
 
 const matchSchema = z.object({
@@ -143,6 +145,7 @@ const tournamentSchema = z.object({
     .array(z.object({ lanes: z.number().int().min(2).max(32), advance: z.number().int().min(1).max(32) }))
     .optional(),
   consolation: z.boolean().optional(),
+  narrative: z.any().optional(),
 });
 
 const teamSchema = z.object({
@@ -156,6 +159,8 @@ const teamSchema = z.object({
   wins: z.number().nonnegative().optional(),
   losses: z.number().nonnegative().optional(),
   championshipWins: z.number().nonnegative().optional(),
+  role: z.enum(["hero", "villain", "neutral"]).optional(),
+  story: z.string().max(500).optional(),
 });
 
 const manifestSchema = z.object({
