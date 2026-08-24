@@ -1941,7 +1941,7 @@ function MatchCell({
 
 
 function Bracket({
-  t, cars, carById, teamById, onPick, onSelectSeriesCar, onPickSeriesGame, onTiebreaker,
+  t, cars, carById, teamById, onPick, onSelectSeriesCar, onPickSeriesGame, onTiebreaker, narrativeFor,
 }: {
   t: Tournament;
   cars?: Car[];
@@ -1951,6 +1951,7 @@ function Bracket({
   onSelectSeriesCar?: (matchId: string, gameId: string, side: "A" | "B", carId: string | null) => void;
   onPickSeriesGame?: (matchId: string, gameId: string, winnerCarId: string) => void;
   onTiebreaker?: (matchId: string, teamWinnerId: string, winnerCarId: string, loserCarId: string | null) => void;
+  narrativeFor?: (m: Match) => MatchNarrative | null;
 }) {
   const isDouble = t.format === "double";
   const isTeams = t.participationType === "teams";
@@ -1979,6 +1980,7 @@ function Bracket({
         teamA={isTeams ? teamById?.(m.teamAId) : undefined}
         teamB={isTeams ? teamById?.(m.teamBId) : undefined}
         winnerId={m.winnerId}
+        narrative={narrativeFor?.(m)}
         onPick={(id) => onPick(m.id, id)}
       />
     );
