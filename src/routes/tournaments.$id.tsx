@@ -875,7 +875,39 @@ function TournamentDetail() {
         )}
       </div>
 
+      {narrativeOn && (
+        <StorySection
+          tournament={tournament}
+          narrative={narrative}
+          cars={cars}
+          teams={teams}
+          rivalries={rivalries}
+          champ={champ?.name ?? null}
+          open={narrativeSettingsOpen}
+          onToggleSettings={() => setNarrativeSettingsOpen((v) => !v)}
+          onChange={updateNarrative}
+        />
+      )}
+
+      {!narrativeOn && (
+        <div className="mt-10 flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => updateNarrative({ enabled: true })}>
+            <BookOpen className="mr-2 h-4 w-4" />
+            Enable narrative mode
+          </Button>
+        </div>
+      )}
+
+      <NarrativeEventDialog
+        open={!!twistMatchId}
+        event={twistEvent}
+        onOpenChange={(o) => { if (!o) setTwistMatchId(null); }}
+        onAccept={acceptTwist}
+        onDismiss={dismissTwist}
+      />
+
       {certificatePlacements.length > 0 && (
+
         <TournamentCertificateDialog
           open={certificateOpen}
           onOpenChange={setCertificateOpen}
