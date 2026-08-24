@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useLocalStorage, uid } from "@/lib/storage";
-import type { Team, Car } from "@/lib/types";
+import type { Team, Car, NarrativeRole } from "@/lib/types";
 import { CarCard } from "@/components/CarCard";
 import { Plus, Trash2, Pencil, Users, Check, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { ROLE_LABEL } from "@/lib/narrative";
 
 export const Route = createFileRoute("/teams")({
   head: () => ({
@@ -67,6 +68,8 @@ function TeamsPage() {
   const [editing, setEditing] = useState<Team | undefined>();
   const [name, setName] = useState("");
   const [sponsor, setSponsor] = useState("");
+  const [role, setRole] = useState<NarrativeRole>("neutral");
+  const [story, setStory] = useState("");
   const [color, setColor] = useState(PALETTE[0]);
   const [picked, setPicked] = useState<string[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +106,8 @@ function TeamsPage() {
     setEditing(t);
     setName(t.name);
     setSponsor(t.sponsor || "");
+    setRole(t.role ?? "neutral");
+    setStory(t.story ?? "");
     setColor(t.color);
     setPicked(t.carIds);
     setOpen(true);
@@ -110,10 +115,10 @@ function TeamsPage() {
   function save() {
     if (!name.trim()) return toast.error("Team name required");
     if (editing) {
-      setTeams((prev) => prev.map((t) => (t.id === editing.id ? { ...t, name: name.trim().slice(0, 40), color, sponsor: sponsor.trim() || undefined, carIds: picked } : t)));
+      setTeams((prev) => prev.map((t) => (t.id === editing.id ? { ...t, name: name.trim().slice(0, 40), color, sponsor: sponsor.trim() || undefined, role, story: story.trim().slice(0, 200) || undefined, carIds: picked } : t)));
       toast.success("Team updated");
     } else {
-      const t: Team = { id: uid(), name: name.trim().slice(0, 40), color, sponsor: sponsor.trim() || undefined, carIds: picked, createdAt: Date.now() };
+      const t: Team = { id: uid(), name: name.trim().slice(0, 40), color, sponsor: sponsor.trim() || undefined, role, story: story.trim().slice(0, 200) || undefined, carIds: picked, createdAt: Date.now() };
       setTeams((prev) => [t, ...prev]);
       toast.success("Team created");
     }
@@ -162,6 +167,28 @@ function TeamsPage() {
                       Randomize
                     </Button>
                   </div>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label className="mb-2 block">Story role</Label>
+                  <div className="flex gap-2">
+                    {(["hero", "neutral", "villain"] as NarrativeRole[]).map((r) => (
+                      <Button
+                        key={r}
+                        type="button"
+                        size="sm"
+                        variant={role === r ? "default" : "outline"}
+                        onClick={() => setRole(r)}
+                      >
+                        {ROLE_LABEL[r]}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="team-story">Backstory (optional)</Label>
+                  <Input id="team-story" value={story} onChange={(e) => setStory(e.target.value)} maxLength={200} placeholder="Built in a garage out of spare parts..." />
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
