@@ -10,6 +10,7 @@ import type {
   NarrativeEvent,
   NarrativeRole,
   TournamentNarrative,
+  Rivalry,
 } from "@/lib/types";
 import { applyWinner, standingsFor, buildSeededBracket, rankQualifiers, applyHeatFinish } from "@/lib/bracket";
 import { getTournamentPlacements } from "@/lib/tournamentPlacements";
@@ -2156,5 +2157,137 @@ function RoundRobin({
         </Card>
       </div>
     </div>
+  );
+}
+
+/**
+ * Story panel: settings, rivalries, character arcs and the running story log.
+ */
+function StorySection({
+  tournament,
+  narrative,
+  cars,
+  teams,
+  rivalries,
+  champ,
+  open,
+  onToggleSettings,
+  onChange,
+}: {
+  tournament: Tournament;
+  narrative: TournamentNarrative;
+  cars: Car[];
+  teams: Team[];
+  rivalries: Rivalry[];
+  champ: string | null;
+  open: boolean;
+  onToggleSettings: () => void;
+  onChange: (patch: Partial<TournamentNarrative>) => void;
+}) {
+  const arcs = computeArcs(tournament, narrative, cars, teams);
+  const log = [...(narrative.log ?? [])].sort((a, b) => b.at - a.at);
+  const note = championNote(tournament, narrative, cars, teams);
+  const participantIds =
+    (tournament.participationType === "teams" ? tournament.teamIds : tournament.carIds) ?? [];
+
+  return (
+    <section className="mt-12">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider">
+          <BookOpen className="h-4 w-4 text-primary" />
+          Story
+        </h2>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={onToggleSettings}>
+            {open ? "Hide settings" : "Narrative settings"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => onChange({ enabled: false })}>
+            Turn off
+          </Button>
+        </div>
+      </div>
+
+      {open && (
+        <div className="mt-4">
+          <NarrativePanel
+            narrative={narrative}
+            participantIds={participantIds}
+            cars={cars}
+            teams={teams}
+            onChange={onChange}
+          />
+        </div>
+      )}
+
+      {note && (
+        <Card className="mt-4 border-primary/40 bg-primary/5 p-4 text-sm font-medium">{note}</Card>
+      )}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card className="p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Character arcs
+          </h3>
+          {arcs.size === 0 ? (
+            <p className="text-sm text-muted-foreground">No races run yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {[...arcs.entries()].map(([id, a]) => (
+                <li key={id} className="flex items-start justify-between gap-3 text-sm">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{nameOf(id, cars, teams)}</div>
+                    <div className="text-xs text-muted-foreground">{a.note}</div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-primary">{a.arc}</div>
+                    <div className="text-[11px] text-muted-foreground">{a.wins}W · {a.losses}L</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card className="p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Story log
+          </h3>
+          {log.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nothing has happened yet. Pick winners and accept twists to build the story.
+            </p>
+          ) : (
+            <ol className="space-y-2">
+              {log.map((e) => (
+                <li key={e.id} className="border-l-2 border-border pl-3 text-sm">
+                  <span className="mr-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {e.kind}
+                  </span>
+                  {e.text}
+                </li>
+              ))}
+            </ol>
+          )}
+        </Card>
+      </div>
+
+      {rivalries.length > 0 && (
+        <Card className="mt-4 p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Rivalries
+          </h3>
+          <ul className="space-y-1.5 text-sm">
+            {rivalries.map((r) => (
+              <li key={r.id}>
+                <span className="font-medium">
+                  {nameOf(r.aId, cars, teams)} vs {nameOf(r.bId, cars, teams)}
+                </span>
+                <span className="text-muted-foreground"> — {r.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </section>
   );
 }
