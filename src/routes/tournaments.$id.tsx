@@ -2049,7 +2049,7 @@ function Bracket({
 }
 
 function RoundRobin({
-  t, cars, teams, onPick, onSelectSeriesCar, onPickSeriesGame, onTiebreaker,
+  t, cars, teams, onPick, onSelectSeriesCar, onPickSeriesGame, onTiebreaker, narrativeFor,
 }: {
   t: Tournament;
   cars: Car[];
@@ -2058,6 +2058,7 @@ function RoundRobin({
   onSelectSeriesCar?: (matchId: string, gameId: string, side: "A" | "B", carId: string | null) => void;
   onPickSeriesGame?: (matchId: string, gameId: string, winnerCarId: string) => void;
   onTiebreaker?: (matchId: string, teamWinnerId: string, winnerCarId: string, loserCarId: string | null) => void;
+  narrativeFor?: (m: Match) => MatchNarrative | null;
 }) {
   const standings = standingsFor(t, cars, teams);
   const isTeams = t.participationType === "teams";
